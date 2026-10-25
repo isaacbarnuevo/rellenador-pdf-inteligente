@@ -1,0 +1,3270 @@
+<!DOCTYPE html>
+    <title>Rellenador y Firmador de PDF y Word Inteligente</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- PDF.js for rendering PDF pages -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- pdf-lib for generating and exporting modified PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <!-- Mammoth.js for converting Word (.docx) documents to clean HTML -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- html2canvas for rendering Word HTML pages into crisp A4 PDF pages -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: manipulation;
+            overscroll-behavior: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Custom scrollbar for horizontal chip bars */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* PDF Page Container & Overlay styling */
+        #pdf-workspace {
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 16px 16px;
+        }
+
+        .overlay-item {
+            position: absolute;
+            cursor: move;
+            touch-action: none;
+            user-select: none;
+            transform-origin: top left;
+            transition: box-shadow 0.15s ease, outline 0.15s ease;
+            z-index: 20;
+            white-space: nowrap;
+            line-height: 1;
+        }
+
+        .overlay-item.selected {
+            outline: 2px dashed #2563eb;
+            outline-offset: 3px;
+            background-color: rgba(37, 99, 235, 0.08);
+            border-radius: 2px;
+            z-index: 30;
+        }
+
+        /* Target crosshairs when user taps on PDF */
+        #tap-indicator {
+            pointer-events: none;
+            transition: all 0.2s ease-out;
+        }
+
+        /* Styling for Word (.docx) to A4 sheet conversion & live editor */
+        .word-a4-sheet {
+            width: 794px;
+            min-height: 1123px;
+            background: #ffffff;
+            color: #0f172a;
+            padding: 56px 64px;
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-size: 14.5px;
+            line-height: 1.55;
+            box-sizing: border-box;
+        }
+        .word-a4-sheet h1, .word-a4-sheet h2, .word-a4-sheet h3 {
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 700;
+            color: #0f172a;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        .word-a4-sheet p {
+            margin-bottom: 10px;
+        }
+        .word-a4-sheet table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+        }
+        .word-a4-sheet table td, .word-a4-sheet table th {
+            border: 1px solid #64748b;
+            padding: 7px 10px;
+            vertical-align: top;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-800 h-screen w-screen overflow-hidden flex flex-col">
+
+    <!-- OFFSCREEN RENDER CONTAINER FOR WORD (.DOCX) TO A4 PDF CONVERSION -->
+    <div id="offscreen-word-host" class="fixed -left-[9999px] top-0 pointer-events-none opacity-0 z-[-1]"></div>
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="bg-slate-900 text-white px-2.5 sm:px-4 py-2.5 border-b border-slate-800 flex items-center justify-between shrink-0 z-40 shadow-md">
+        <div class="flex items-center gap-2">
+            <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold shadow-inner shrink-0">
+                <i class="fa-solid fa-file-signature text-lg"></i>
+            </div>
+            <div class="leading-tight">
+                <h1 class="font-bold text-xs sm:text-base tracking-tight">PDF y Word <span class="text-amber-400 font-semibold">Sin Cortes</span></h1>
+                <p class="text-[10px] text-slate-400 hidden sm:block">Abre PDF o Word (.docx), rellena sin cortes, firma y une tu DNI en 1 PDF</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-1 sm:gap-1.5">
+            <!-- Load Sample Confirmation PDF -->
+            <button id="btn-demo-pdf" onclick="loadSampleConfirmationPDF(false)" class="bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 px-2 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition" title="Cargar PDF de Confirmación de prueba">
+                <i class="fa-solid fa-file-pdf text-rose-400"></i>
+                <span class="hidden xl:inline">Demo PDF</span>
+            </button>
+
+            <!-- NEW: Test with Sample Word (.docx) Document -->
+            <button id="btn-demo-word" onclick="loadSampleWordDocument()" class="bg-blue-950/90 hover:bg-blue-900 text-sky-300 border border-sky-500/40 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition" title="Probar con un documento Word (.docx) de ejemplo">
+                <i class="fa-solid fa-file-word text-sky-400"></i>
+                <span class="hidden md:inline">Probar Word (.docx)</span>
+                <span class="md:hidden">Word Demo</span>
+            </button>
+
+            <!-- Create PDF from Images -->
+            <label class="bg-indigo-950/90 hover:bg-indigo-900 text-indigo-300 border border-indigo-500/40 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition shadow-sm" title="Crear un nuevo PDF uniendo varias imágenes o fotos">
+                <i class="fa-regular fa-images text-indigo-400"></i>
+                <span class="hidden md:inline">Crear de Fotos</span>
+                <span class="md:hidden">Fotos</span>
+                <input type="file" id="images-to-pdf-upload" accept="image/*,.jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden" onchange="handleCreatePdfFromImagesUpload(event)">
+            </label>
+
+            <!-- Upload real PDF or Word (.docx / .doc) -->
+            <label class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow-sm">
+                <i class="fa-solid fa-folder-open text-amber-400"></i>
+                <span>Abrir Archivo</span>
+                <input type="file" id="pdf-upload" accept=".pdf,.docx,.doc,image/*,.jpg,.jpeg,.png,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" multiple class="hidden" onchange="handleFileUpload(event)">
+            </label>
+
+            <!-- Quick Header Button for Attachments / DNI -->
+            <button onclick="openModal('modal-attachments')" class="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                <i class="fa-solid fa-id-card text-amber-300"></i>
+                <span class="hidden lg:inline">Anexos / DNI</span>
+                <span id="top-annex-badge" class="bg-amber-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+            </button>
+
+            <!-- Generate & Download Unified PDF -->
+            <button id="btn-export-pdf" onclick="exportFinalPDF()" class="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-emerald-900/30 transition">
+                <i class="fa-solid fa-file-export"></i>
+                <span>Generar PDF</span>
+            </button>
+
+            <!-- Help / Install PWA Modal Button -->
+            <button onclick="openModal('modal-help')" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center border border-slate-700" title="Cómo instalar en tu móvil">
+                <i class="fa-solid fa-mobile-screen-button"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- SECONDARY BAR: PAGE NAVIGATION & ZOOM -->
+    <div class="bg-slate-800 text-slate-200 px-3 py-1.5 text-xs flex items-center justify-between border-b border-slate-700 shrink-0 z-30">
+        <div class="flex items-center gap-1.5">
+            <button onclick="changePage(-1)" id="btn-prev-page" class="w-7 h-7 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 flex items-center justify-center">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <span id="page-indicator" class="font-medium px-1.5 text-slate-300">Pág 1 / 1</span>
+            <button onclick="changePage(1)" id="btn-next-page" class="w-7 h-7 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 flex items-center justify-center">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <!-- Badge showing if current doc originated from Word (.docx) and lets user re-open Word text editor -->
+            <button onclick="reopenWordEditorModal()" id="word-source-pill" class="hidden ml-1 bg-sky-950 text-sky-300 border border-sky-600/60 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 hover:bg-sky-900 transition" title="Editar el texto original del Word antes de pasar a PDF">
+                <i class="fa-solid fa-file-word text-sky-400"></i>
+                <span>Editar texto Word</span>
+            </button>
+            <!-- Badge showing extra attached pages that will be appended at the end -->
+            <button onclick="openModal('modal-attachments')" id="extra-pages-pill" class="hidden ml-1 bg-indigo-950 text-indigo-300 border border-indigo-700/70 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 hover:bg-indigo-900 transition">
+                <i class="fa-solid fa-paperclip text-amber-400"></i>
+                <span id="extra-pages-text">+1 pág. anexa</span>
+            </button>
+        </div>
+
+        <div class="text-[11px] text-amber-300/90 truncate max-w-[160px] sm:max-w-xs flex items-center gap-1">
+            <i class="fa-regular fa-hand-pointer"></i>
+            <span id="status-hint">Toca cualquier línea del documento para escribir</span>
+        </div>
+
+        <div class="flex items-center gap-1">
+            <button onclick="adjustZoom(-0.15)" class="w-7 h-7 rounded bg-slate-700 hover:bg-slate-600 flex items-center justify-center" title="Alejar">
+                <i class="fa-solid fa-magnifying-glass-minus"></i>
+            </button>
+            <span id="zoom-indicator" class="font-mono text-[11px] w-11 text-center">100%</span>
+            <button onclick="adjustZoom(0.15)" class="w-7 h-7 rounded bg-slate-700 hover:bg-slate-600 flex items-center justify-center" title="Acercar">
+                <i class="fa-solid fa-magnifying-glass-plus"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- CONTEXTUAL FLOATING BAR FOR SELECTED ELEMENT (ZERO CUT-OFF FINE TUNING) -->
+    <div id="selection-toolbar" class="hidden bg-blue-950/95 backdrop-blur-md text-white px-3 py-2 border-b border-blue-700/60 shadow-xl shrink-0 z-30 transition-all">
+        <div class="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <!-- Size Control (Critical for preventing cut-offs) -->
+            <div class="flex items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
+                <span class="text-[11px] text-blue-300 mr-1 font-medium">Tamaño:</span>
+                <button onclick="resizeSelected(-1)" class="w-8 h-7 rounded bg-blue-700 hover:bg-blue-600 active:scale-95 flex items-center justify-center font-bold text-sm" title="Reducir para que quepa entero">
+                    <i class="fa-solid fa-minus"></i>
+                </button>
+                <span id="selected-size-label" class="font-mono text-xs px-2 min-w-[42px] text-center font-semibold text-amber-300">13px</span>
+                <button onclick="resizeSelected(1)" class="w-8 h-7 rounded bg-blue-700 hover:bg-blue-600 active:scale-95 flex items-center justify-center font-bold text-sm" title="Aumentar tamaño">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            </div>
+
+            <!-- Fine 1px Nudge Arrows -->
+            <div class="flex items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
+                <span class="text-[11px] text-blue-300 mr-1 hidden sm:inline">Ajuste fino:</span>
+                <button onclick="nudgeSelected(-1.5, 0)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:bg-blue-600 flex items-center justify-center">
+                    <i class="fa-solid fa-arrow-left text-xs"></i>
+                </button>
+                <button onclick="nudgeSelected(0, -1.5)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:bg-blue-600 flex items-center justify-center">
+                    <i class="fa-solid fa-arrow-up text-xs"></i>
+                </button>
+                <button onclick="nudgeSelected(0, 1.5)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:bg-blue-600 flex items-center justify-center">
+                    <i class="fa-solid fa-arrow-down text-xs"></i>
+                </button>
+                <button onclick="nudgeSelected(1.5, 0)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:bg-blue-600 flex items-center justify-center">
+                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                </button>
+            </div>
+
+            <!-- Ink Color & Actions -->
+            <div class="flex items-center gap-1.5">
+                <div id="text-color-controls" class="flex items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
+                    <button onclick="setSelectedColor('#0f172a')" class="w-5 h-5 rounded-full bg-slate-900 border-2 border-white/70" title="Negro"></button>
+                    <button onclick="setSelectedColor('#1d4ed8')" class="w-5 h-5 rounded-full bg-blue-700 border-2 border-white/70" title="Azul bolígrafo"></button>
+                    <button onclick="setSelectedColor('#dc2626')" class="w-5 h-5 rounded-full bg-red-600 border-2 border-white/70" title="Rojo"></button>
+                </div>
+
+                <button id="btn-edit-selected" onclick="openEditSelectedModal()" class="px-2.5 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-medium flex items-center gap-1">
+                    <i class="fa-solid fa-pen"></i>
+                    <span class="hidden sm:inline">Editar</span>
+                </button>
+
+                <button onclick="duplicateSelected()" class="px-2.5 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-medium flex items-center gap-1" title="Duplicar">
+                    <i class="fa-regular fa-copy"></i>
+                </button>
+
+                <button onclick="deleteSelected()" class="px-2.5 h-8 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium flex items-center gap-1">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+
+                <button onclick="deselectAll()" class="px-2 h-8 rounded-lg bg-blue-800/60 hover:bg-blue-800 text-blue-200 text-xs">
+                    Listo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN WORKSPACE: SCROLLABLE PDF CANVAS + OVERLAY CONTAINER -->
+    <main id="pdf-workspace" class="flex-1 overflow-auto relative flex flex-col items-center justify-start p-3 sm:p-6 select-none gap-4">
+        <!-- Wrapper that matches exact PDF canvas dimensions -->
+        <div id="pdf-stage" class="relative shadow-2xl bg-white rounded-sm overflow-hidden transition-all duration-75 shrink-0" style="width: 595px; height: 842px;">
+            <canvas id="pdf-canvas" class="block w-full h-full pointer-events-none"></canvas>
+            
+            <!-- Interactive layer where user taps and drags texts/signatures/stamped images -->
+            <div id="overlay-layer" class="absolute inset-0 z-10" onclick="handleStageTap(event)" ondblclick="handleStageDoubleClick(event)"></div>
+
+            <!-- Visual indicator of where the next item will be placed (exact baseline marker) -->
+            <div id="tap-indicator" class="hidden absolute pointer-events-none z-10 transition-all duration-75">
+                <div class="relative">
+                    <div class="w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-blue-600 bg-blue-500/30 flex items-center justify-center shadow-sm">
+                        <div class="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping"></div>
+                    </div>
+                    <div class="absolute left-2 top-0 w-12 border-b-2 border-blue-600/90 border-dashed"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Visual Banner underneath the PDF showing attached extra pages (DNI / Photos / PDFs) -->
+        <div id="workspace-annex-banner" onclick="openModal('modal-attachments')" class="w-full max-w-xl bg-slate-800/90 hover:bg-slate-800 border border-indigo-500/40 rounded-2xl p-3 text-white shadow-xl cursor-pointer transition flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-amber-300 shrink-0">
+                    <i class="fa-solid fa-id-card-clip text-lg"></i>
+                </div>
+                <div>
+                    <h4 class="text-xs sm:text-sm font-bold flex items-center gap-1.5">
+                        <span>¿Te piden adjuntar fotocopia del DNI, Libro de Familia o Partida de Bautismo?</span>
+                    </h4>
+                    <p id="workspace-annex-sub" class="text-[11px] text-slate-300">Toca aquí para añadir el DNI (ambas caras), fotos u otros PDFs al final del documento.</p>
+                </div>
+            </div>
+            <span class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl shrink-0">
+                Adjuntar
+            </span>
+        </div>
+    </main>
+
+    <!-- BOTTOM SMART DOCK: QUICK SAVED CHIPS & 4 PRIMARY ACTION BUTTONS -->
+    <footer class="bg-slate-900 border-t border-slate-800 text-white shrink-0 z-40 shadow-2xl">
+        <!-- Quick Saved Data Horizontal Strip -->
+        <div class="px-3 py-2 bg-slate-950/70 border-b border-slate-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1">
+                <i class="fa-solid fa-bolt text-amber-400"></i> Rápido:
+            </span>
+            <!-- Quick Checkmark & Today's Date -->
+            <button onclick="insertQuickText('✓', 16)" class="shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-emerald-400 border border-slate-700 px-2.5 py-1 rounded-full text-xs font-bold transition">
+                ✓ Marca
+            </button>
+            <button onclick="insertQuickText('✕', 15)" class="shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-blue-400 border border-slate-700 px-2.5 py-1 rounded-full text-xs font-bold transition">
+                ✕ Cruz
+            </button>
+            <button onclick="insertTodayDate()" class="shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-amber-300 border border-slate-700 px-2.5 py-1 rounded-full text-xs font-medium transition flex items-center gap-1">
+                <i class="fa-regular fa-calendar"></i> Fecha Hoy
+            </button>
+
+            <!-- Dynamic Saved Chips rendered via JS -->
+            <div id="quick-chips-strip" class="flex items-center gap-1.5"></div>
+        </div>
+
+        <!-- Primary Mobile Action Buttons (Now 4 columns including Anexos / DNI) -->
+        <div class="grid grid-cols-4 gap-1.5 sm:gap-2 p-2 max-w-3xl mx-auto">
+            <button onclick="openAddTextModal()" class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 shadow-md">
+                <i class="fa-solid fa-font text-sm"></i>
+                <span>Añadir Texto</span>
+            </button>
+
+            <button onclick="openModal('modal-saved-data')" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-100 border border-slate-700 py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5">
+                <div class="flex items-center gap-1">
+                    <i class="fa-solid fa-bookmark text-amber-400 text-sm"></i>
+                    <span id="saved-count-badge" class="bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+                </div>
+                <span>Mis Datos</span>
+            </button>
+
+            <button onclick="openModal('modal-signatures')" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-100 border border-slate-700 py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5">
+                <div class="flex items-center gap-1">
+                    <i class="fa-solid fa-signature text-emerald-400 text-sm"></i>
+                    <span id="sig-count-badge" class="bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+                </div>
+                <span>Mis Firmas</span>
+            </button>
+
+            <button onclick="openModal('modal-attachments')" class="bg-indigo-950/90 hover:bg-indigo-900 active:bg-indigo-800 text-indigo-100 border border-indigo-500/50 py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 shadow-md">
+                <div class="flex items-center gap-1">
+                    <i class="fa-solid fa-id-card text-amber-300 text-sm"></i>
+                    <span id="annex-count-badge" class="bg-amber-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+                </div>
+                <span>Anexos / DNI</span>
+            </button>
+        </div>
+    </footer>
+
+    <!-- ========================================== -->
+    <!-- MODAL 1: ADD / EDIT TEXT (WITH AUTO-SAVE)  -->
+    <!-- ========================================== -->
+    <div id="modal-add-text" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
+                <h3 id="modal-text-title" class="font-bold text-base flex items-center gap-2">
+                    <i class="fa-solid fa-keyboard text-blue-400"></i> Escribir texto en el PDF
+                </h3>
+                <button onclick="closeModal('modal-add-text')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-4 space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Texto completo (sin límite de espacio)</label>
+                    <input type="text" id="input-text-value" placeholder="Ej: Calle Toledo 24, 1ª escalera, 2º derecha" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddOrEditText();}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 outline-none text-base font-medium text-slate-900">
+                    <p class="text-[11px] text-slate-500 mt-1">
+                        <i class="fa-solid fa-circle-check text-emerald-600"></i> No se cortará nunca. Podrás ajustar el tamaño con <kbd class="px-1 bg-slate-100 border rounded">-</kbd> y <kbd class="px-1 bg-slate-100 border rounded">+</kbd>.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Tamaño inicial</label>
+                        <select id="input-text-size" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-medium bg-white">
+                            <option value="10">10 px (Muy pequeño)</option>
+                            <option value="12">12 px (Pequeño - Direcciones)</option>
+                            <option value="14" selected>14 px (Normal - Estándar)</option>
+                            <option value="16">16 px (Mediano)</option>
+                            <option value="20">20 px (Grande)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Color de letra</label>
+                        <select id="input-text-color" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-medium bg-white">
+                            <option value="#0f172a">Negro formal</option>
+                            <option value="#1d4ed8">Azul bolígrafo</option>
+                            <option value="#dc2626">Rojo</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Save to localStorage toggle -->
+                <div id="save-memory-box" class="bg-amber-50 border border-amber-200/80 rounded-xl p-3 space-y-2">
+                    <label class="flex items-center gap-2.5 cursor-pointer">
+                        <input type="checkbox" id="check-save-chip" checked class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500">
+                        <span class="text-xs sm:text-sm font-semibold text-slate-800">Guardar en "Mis Datos" para futuros PDFs</span>
+                    </label>
+                    <div id="save-chip-label-container">
+                        <input type="text" id="input-chip-label" placeholder="Etiqueta opcional (ej: Mi Nombre, Dirección, DNI...)" class="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-xs text-slate-700 outline-none focus:border-amber-500">
+                    </div>
+                </div>
+
+                <div class="flex gap-2 pt-1">
+                    <button onclick="closeModal('modal-add-text')" class="w-1/3 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-semibold text-sm hover:bg-slate-100">
+                        Cancelar
+                    </button>
+                    <button onclick="confirmAddOrEditText()" class="w-2/3 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm shadow-lg shadow-blue-600/30">
+                        Colocar en el PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL 2: MIS DATOS GUARDADOS (MEMORY)      -->
+    <!-- ========================================== -->
+    <div id="modal-saved-data" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col">
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0">
+                <div>
+                    <h3 class="font-bold text-base flex items-center gap-2">
+                        <i class="fa-solid fa-bookmark text-amber-400"></i> Mis Datos Guardados
+                    </h3>
+                    <p class="text-[11px] text-slate-400">Toca cualquier dato para estamparlo directamente en el PDF</p>
+                </div>
+                <button onclick="closeModal('modal-saved-data')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Add new saved data directly -->
+            <div class="p-3 bg-slate-100 border-b border-slate-200 shrink-0">
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input type="text" id="new-chip-label" placeholder="Etiqueta (ej: DNI, Fecha Nac.)" class="sm:w-1/3 px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium bg-white">
+                    <div class="flex-1 flex gap-1.5">
+                        <input type="text" id="new-chip-value" placeholder="Dato a recordar para siempre..." class="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium bg-white">
+                        <button onclick="addChipFromManager()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1">
+                            <i class="fa-solid fa-plus"></i> Guardar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- List of saved chips -->
+            <div id="saved-chips-list" class="p-4 overflow-y-auto space-y-2 flex-1"></div>
+
+            <div class="p-3 bg-slate-50 border-t border-slate-200 text-center shrink-0">
+                <button onclick="closeModal('modal-saved-data')" class="w-full py-2 rounded-xl bg-slate-800 text-white text-xs font-semibold">
+                    Cerrar panel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL 3: MULTI-SIGNATURE MANAGER           -->
+    <!-- ========================================== -->
+    <div id="modal-signatures" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0">
+                <div>
+                    <h3 class="font-bold text-base flex items-center gap-2">
+                        <i class="fa-solid fa-signature text-emerald-400"></i> Mis Firmas Guardadas
+                    </h3>
+                    <p class="text-[11px] text-slate-400">Guarda la tuya, la de tu mujer o cualquier familiar</p>
+                </div>
+                <button onclick="closeModal('modal-signatures')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-4 overflow-y-auto space-y-4 flex-1">
+                <!-- Saved Signatures Gallery -->
+                <div>
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Firmas listas para usar (Toca para insertar)</h4>
+                    <div id="saved-signatures-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5"></div>
+                </div>
+
+                <hr class="border-slate-200">
+
+                <!-- Create New Signature Section -->
+                <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <i class="fa-solid fa-pen-nib text-blue-600"></i> Crear Nueva Firma
+                        </h4>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[11px] text-slate-500">Tinta:</span>
+                            <button onclick="setSigPadColor('#1d4ed8')" id="sig-color-blue" class="w-5 h-5 rounded-full bg-blue-700 ring-2 ring-offset-1 ring-blue-600"></button>
+                            <button onclick="setSigPadColor('#0f172a')" id="sig-color-black" class="w-5 h-5 rounded-full bg-slate-900"></button>
+                        </div>
+                    </div>
+
+                    <input type="text" id="input-sig-name" placeholder="Nombre (ej: Firma Lucas, Firma Mujer...)" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium bg-white">
+
+                    <!-- Finger/Mouse Drawing Canvas -->
+                    <div class="relative bg-white border-2 border-dashed border-slate-300 rounded-xl overflow-hidden">
+                        <canvas id="signature-pad" width="440" height="150" class="w-full h-[140px] touch-none cursor-crosshair block"></canvas>
+                        <span class="absolute bottom-1.5 left-2.5 text-[10px] text-slate-400 pointer-events-none">Firma aquí con el dedo o ratón</span>
+                        <button onclick="clearSignaturePad()" class="absolute top-2 right-2 bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded-lg text-[11px] font-medium">
+                            <i class="fa-solid fa-eraser"></i> Limpiar
+                        </button>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <!-- Upload photo of signature option -->
+                        <label class="text-xs text-blue-600 hover:text-blue-700 font-medium cursor-pointer flex items-center gap-1">
+                            <i class="fa-solid fa-camera"></i> ¿Subir foto de firma en papel?
+                            <input type="file" accept="image/*" class="hidden" onchange="handleSignatureImageUpload(event)">
+                        </label>
+
+                        <button onclick="saveCurrentSignature()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-md flex items-center gap-1.5">
+                            <i class="fa-solid fa-floppy-disk"></i> Guardar e Insertar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 4: GESTOR DE ANEXOS, DNI (ANVERSO/REVERSO), FOTOS Y OTROS PDFs     -->
+    <!-- ========================================================================= -->
+    <div id="modal-attachments" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[94vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0">
+                <div>
+                    <h3 class="font-bold text-base flex items-center gap-2">
+                        <i class="fa-solid fa-id-card text-amber-400"></i> Anexos: Adjuntar DNI, Fotos o PDFs
+                    </h3>
+                    <p class="text-[11px] text-slate-300">Todo lo que adjuntes se unirá en un único PDF junto con tu formulario</p>
+                </div>
+                <button onclick="closeModal('modal-attachments')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Tabs inside Attachments Modal -->
+            <div class="bg-slate-100 px-3 pt-2 border-b border-slate-200 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+                <button onclick="switchAnnexTab('tab-dni')" id="btn-tab-dni" class="px-3 py-2 rounded-t-xl text-xs font-bold bg-white text-indigo-700 border-t border-x border-slate-200 flex items-center gap-1.5 shrink-0">
+                    <i class="fa-solid fa-id-card"></i> 1. DNI (2 Caras en 1 Hoja)
+                </button>
+                <button onclick="switchAnnexTab('tab-files')" id="btn-tab-files" class="px-3 py-2 rounded-t-xl text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 shrink-0">
+                    <i class="fa-solid fa-file-circle-plus text-blue-600"></i> 2. Fotos / PDFs / Word
+                </button>
+                <button onclick="switchAnnexTab('tab-saved-docs')" id="btn-tab-saved-docs" class="px-3 py-2 rounded-t-xl text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 shrink-0">
+                    <i class="fa-solid fa-vault text-amber-500"></i> DNIs Guardados (<span id="saved-dnis-count">0</span>)
+                </button>
+            </div>
+
+            <!-- Scrollable Modal Body -->
+            <div class="p-4 overflow-y-auto space-y-5 flex-1">
+
+                <!-- TAB 1: SPECIAL DNI COMPOSER (FRONT + BACK ON 1 A4 PAGE) -->
+                <div id="tab-dni" class="space-y-3">
+                    <div class="bg-indigo-50/80 border border-indigo-200 rounded-2xl p-3.5 space-y-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <h4 class="text-xs sm:text-sm font-bold text-indigo-950 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-address-card text-indigo-600"></i> Fotocopia de DNI en 1 página A4
+                                </h4>
+                                <p class="text-[11px] text-indigo-800/80">Sube o haz foto del Anverso y Reverso; se colocan centrados y a tamaño real.</p>
+                            </div>
+                            <button onclick="loadDemoDNIPair()" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border border-indigo-300 px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> Cargar DNI de Prueba
+                            </button>
+                        </div>
+
+                        <input type="text" id="dni-title-input" placeholder="Título en la hoja (ej: DNI - Lucas Vázquez Muñoz / Padre)" class="w-full px-3 py-2 rounded-xl border border-indigo-200 text-xs font-medium bg-white">
+
+                        <!-- Front & Back Upload Cards -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <!-- Anverso -->
+                            <div class="bg-white border-2 border-dashed border-indigo-300 rounded-xl p-3 flex flex-col items-center justify-center text-center relative min-h-[135px]">
+                                <div id="dni-front-preview-wrap" class="hidden w-full flex flex-col items-center">
+                                    <img id="dni-front-preview" class="h-24 object-contain rounded-lg border border-slate-200 shadow-sm mb-2" alt="Anverso DNI">
+                                    <div class="flex gap-1.5">
+                                        <button onclick="rotateDniSide('front')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded text-[11px] font-medium">
+                                            <i class="fa-solid fa-rotate-right"></i> Girar 90°
+                                        </button>
+                                        <button onclick="clearDniSide('front')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded text-[11px] font-medium">
+                                            <i class="fa-solid fa-trash"></i> Quitar
+                                        </button>
+                                    </div>
+                                </div>
+                                <label id="dni-front-label" class="cursor-pointer flex flex-col items-center justify-center w-full h-full py-2">
+                                    <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mb-1.5">
+                                        <i class="fa-solid fa-camera text-base"></i>
+                                    </div>
+                                    <span class="text-xs font-bold text-slate-800">1. Anverso (Delante)</span>
+                                    <span class="text-[10px] text-slate-500 mt-0.5">Toca para hacer foto o elegir</span>
+                                    <input type="file" accept="image/*" class="hidden" onchange="handleDniSideUpload(event, 'front')">
+                                </label>
+                            </div>
+
+                            <!-- Reverso -->
+                            <div class="bg-white border-2 border-dashed border-indigo-300 rounded-xl p-3 flex flex-col items-center justify-center text-center relative min-h-[135px]">
+                                <div id="dni-back-preview-wrap" class="hidden w-full flex flex-col items-center">
+                                    <img id="dni-back-preview" class="h-24 object-contain rounded-lg border border-slate-200 shadow-sm mb-2" alt="Reverso DNI">
+                                    <div class="flex gap-1.5">
+                                        <button onclick="rotateDniSide('back')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded text-[11px] font-medium">
+                                            <i class="fa-solid fa-rotate-right"></i> Girar 90°
+                                        </button>
+                                        <button onclick="clearDniSide('back')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded text-[11px] font-medium">
+                                            <i class="fa-solid fa-trash"></i> Quitar
+                                        </button>
+                                    </div>
+                                </div>
+                                <label id="dni-back-label" class="cursor-pointer flex flex-col items-center justify-center w-full h-full py-2">
+                                    <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mb-1.5">
+                                        <i class="fa-solid fa-camera text-base"></i>
+                                    </div>
+                                    <span class="text-xs font-bold text-slate-800">2. Reverso (Detrás)</span>
+                                    <span class="text-[10px] text-slate-500 mt-0.5">Toca para hacer foto o elegir</span>
+                                    <input type="file" accept="image/*" class="hidden" onchange="handleDniSideUpload(event, 'back')">
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Save DNI in phone memory checkbox -->
+                        <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="check-save-dni-memory" checked class="w-4 h-4 rounded text-indigo-600">
+                                <span class="text-xs font-semibold text-slate-800">Guardar este DNI en la memoria del móvil para futuros formularios</span>
+                            </label>
+
+                            <div class="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+                                <button onclick="stampDniOnCurrentPage()" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300 text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 transition">
+                                    <i class="fa-solid fa-stamp text-indigo-600"></i> Estampar en esta hoja
+                                </button>
+                                <button onclick="addDniAsAnnexPage()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 shadow transition">
+                                    <i class="fa-solid fa-plus"></i> Añadir DNI al final del PDF
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: ATTACH LOOSE PHOTOS, OTHER PDF FILES OR WORD (.DOCX) DOCUMENTS -->
+                <div id="tab-files" class="hidden space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <!-- Attach Images (Libro de familia, volante, etc.) -->
+                        <label class="bg-blue-50/70 hover:bg-blue-50 border-2 border-dashed border-blue-300 rounded-2xl p-3.5 flex flex-col items-center justify-center text-center cursor-pointer transition">
+                            <div class="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center mb-1.5 shadow">
+                                <i class="fa-regular fa-images text-base"></i>
+                            </div>
+                            <span class="text-xs font-bold text-slate-900">Adjuntar Fotos</span>
+                            <span class="text-[10px] text-slate-500 mt-0.5">Libro de familia, carnets, recibos (JPG, PNG)</span>
+                            <span class="mt-2 bg-blue-600 text-white text-[11px] font-semibold px-3 py-1 rounded-lg">Elegir Fotos</span>
+                            <input type="file" accept="image/*" multiple class="hidden" onchange="handleAttachImages(event)">
+                        </label>
+
+                        <!-- Attach External PDFs -->
+                        <label class="bg-emerald-50/70 hover:bg-emerald-50 border-2 border-dashed border-emerald-300 rounded-2xl p-3.5 flex flex-col items-center justify-center text-center cursor-pointer transition">
+                            <div class="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center mb-1.5 shadow">
+                                <i class="fa-solid fa-file-pdf text-base"></i>
+                            </div>
+                            <span class="text-xs font-bold text-slate-900">Unir otro PDF</span>
+                            <span class="text-[10px] text-slate-500 mt-0.5">Partida de bautismo, volante, justificante PDF</span>
+                            <span class="mt-2 bg-emerald-600 text-white text-[11px] font-semibold px-3 py-1 rounded-lg">Elegir PDF(s)</span>
+                            <input type="file" accept="application/pdf,.pdf" multiple class="hidden" onchange="handleAttachExternalPDFs(event)">
+                        </label>
+
+                        <!-- NEW: Attach External Word (.docx / .doc) and auto-convert to PDF pages -->
+                        <label class="bg-sky-50/80 hover:bg-sky-100/70 border-2 border-dashed border-sky-300 rounded-2xl p-3.5 flex flex-col items-center justify-center text-center cursor-pointer transition">
+                            <div class="w-10 h-10 rounded-2xl bg-sky-600 text-white flex items-center justify-center mb-1.5 shadow">
+                                <i class="fa-solid fa-file-word text-base"></i>
+                            </div>
+                            <span class="text-xs font-bold text-slate-900">Anexar Word (.docx)</span>
+                            <span class="text-[10px] text-slate-500 mt-0.5">Se convierte en página PDF automáticamente</span>
+                            <span class="mt-2 bg-sky-600 text-white text-[11px] font-semibold px-3 py-1 rounded-lg">Elegir Word</span>
+                            <input type="file" accept=".docx,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" multiple class="hidden" onchange="handleAttachExternalWordDocs(event)">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- TAB 3: SAVED FREQUENT DNIs / DOCUMENTS IN LOCALSTORAGE -->
+                <div id="tab-saved-docs" class="hidden space-y-3">
+                    <p class="text-xs text-slate-600">Aquí tienes los DNIs o documentos guardados en tu teléfono. Toca <strong>"Adjuntar al PDF"</strong> para incluirlos sin tener que volver a hacerles fotos:</p>
+                    <div id="saved-dnis-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5"></div>
+                </div>
+
+                <!-- CURRENT QUEUE OF ATTACHED PAGES THAT WILL BE MERGED -->
+                <div class="pt-2 border-t border-slate-200">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                            <i class="fa-solid fa-layer-group text-indigo-600"></i> Cola de páginas anexas al final del formulario (<span id="queue-count-label">0</span>)
+                        </h4>
+                        <button onclick="clearAllAttachments()" id="btn-clear-annexes" class="hidden text-[11px] text-rose-600 hover:underline font-medium">
+                            Vaciar anexos
+                        </button>
+                    </div>
+
+                    <div id="attachments-queue-list" class="space-y-2">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Modal Footer with Summary & Unified Export CTA -->
+            <div class="p-3 bg-slate-900 text-white border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div class="text-xs">
+                    <span class="text-slate-400">Resultado final:</span>
+                    <strong id="modal-total-pages-summary" class="text-amber-300 ml-1">Formulario (1 pág.) + 0 anexos = 1 pág.</strong>
+                </div>
+                <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button onclick="closeModal('modal-attachments')" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold">
+                        Seguir editando
+                    </button>
+                    <button onclick="exportFinalPDF()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg flex items-center gap-1.5">
+                        <i class="fa-solid fa-download"></i> Generar PDF Unido
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 5: EXPORT READY SUMMARY (DOWNLOAD OR SHARE VIA WHATSAPP/EMAIL)      -->
+    <!-- ========================================================================= -->
+    <div id="modal-export-ready" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
+            <div class="bg-emerald-700 text-white px-4 py-3.5 flex items-center justify-between">
+                <h3 class="font-bold text-base flex items-center gap-2">
+                    <i class="fa-solid fa-circle-check text-emerald-200 text-lg"></i> ¡PDF Completo Generado!
+                </h3>
+                <button onclick="closeModal('modal-export-ready')" class="text-emerald-200 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-4 text-center">
+                <div class="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-inner">
+                    <i class="fa-solid fa-file-pdf text-2xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-slate-900 text-base">Todo unido en un único archivo</h4>
+                    <p id="export-summary-breakdown" class="text-xs text-slate-600 mt-1">Formulario rellenado + Anexos incluidos sin cortes.</p>
+                </div>
+
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-left text-xs space-y-1 text-slate-700">
+                    <div><i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> Textos largos y apellidos incrustados sin recortes.</div>
+                    <div><i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> Firmas aplicadas con fondo transparente.</div>
+                    <div id="export-summary-annex-line"><i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> Documentos anexos unidos al final del PDF.</div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2.5 pt-1">
+                    <button onclick="triggerLastExportDownload()" class="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-download"></i> Descargar PDF
+                    </button>
+                    <button id="btn-native-share" onclick="shareLastExportedPDF()" class="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-share-nodes"></i> Compartir (WhatsApp/Email)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL 6: INSTALL AS MOBILE APP GUIDE       -->
+    <!-- ========================================== -->
+    <div id="modal-help" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
+                <h3 class="font-bold text-base flex items-center gap-2">
+                    <i class="fa-solid fa-mobile-screen-button text-blue-400"></i> Cómo tenerla siempre en tu móvil
+                </h3>
+                <button onclick="closeModal('modal-help')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-4 space-y-3 text-xs sm:text-sm text-slate-700">
+                <p class="font-medium text-slate-900">Esta aplicación guarda tus datos y firmas 100% en la memoria privada de tu teléfono (sin enviar nada a internet).</p>
+                
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-1.5">
+                    <h4 class="font-bold text-blue-900 flex items-center gap-1.5">
+                        <i class="fa-brands fa-android text-emerald-600 text-base"></i> En Android (Chrome):
+                    </h4>
+                    <p>Pulsa los <strong>3 puntos arriba a la derecha (⋮)</strong> y selecciona <strong>"Añadir a pantalla de inicio"</strong> o <strong>"Instalar aplicación"</strong>.</p>
+                </div>
+
+                <div class="bg-slate-100 border border-slate-200 rounded-xl p-3 space-y-1.5">
+                    <h4 class="font-bold text-slate-900 flex items-center gap-1.5">
+                        <i class="fa-brands fa-apple text-slate-800 text-base"></i> En iPhone / iPad (Safari):
+                    </h4>
+                    <p>Pulsa el botón <strong>Compartir</strong> (el cuadrado con la flecha hacia arriba) en la barra inferior y elige <strong>"Añadir a pantalla de inicio"</strong>.</p>
+                </div>
+
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900">
+                    <strong>Truco anticortes:</strong> Si un campo del PDF es muy pequeño (como el de <em>Calle Toledo 24...</em>), simplemente selecciona el texto y pulsa el botón <strong><i class="fa-solid fa-minus"></i></strong> arriba hasta que encaje al milímetro.
+                </div>
+
+                <button onclick="closeModal('modal-help')" class="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm">
+                    ¡Entendido!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 7: WORD (.DOCX / .DOC) SMART PREVIEW, TEXT EDITOR & PDF CONVERTER   -->
+    <!-- ========================================================================= -->
+    <div id="modal-word-bridge" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full sm:max-w-3xl rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[94vh] flex flex-col">
+            <!-- Header -->
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-sky-600 flex items-center justify-center text-white shadow">
+                        <i class="fa-solid fa-file-word text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 id="word-modal-title" class="font-bold text-sm sm:text-base">Documento Word (.docx) Detectado</h3>
+                        <p class="text-[11px] text-sky-300">Puedes escribir dentro del Word ahora o pasarlo directamente al lienzo PDF para rellenar y firmar encima</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-word-bridge')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Mode Explanation Banner & Quick Insert Bar -->
+            <div class="bg-sky-50 border-b border-sky-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div class="text-xs text-sky-950 flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles text-sky-600"></i>
+                    <span><strong>Opción A:</strong> Toca en el documento de abajo si quieres modificar o borrar algo del texto original.</span>
+                </div>
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                    <span class="text-[10px] font-bold uppercase text-sky-700">Pegar dato en cursor:</span>
+                    <button onclick="insertTextIntoWordEditor('Lucas Vázquez Muñoz')" class="bg-white hover:bg-sky-100 text-slate-800 border border-sky-300 px-2 py-0.5 rounded text-[11px] font-medium shrink-0">Nombre</button>
+                    <button onclick="insertTextIntoWordEditor('12345678Z')" class="bg-white hover:bg-sky-100 text-slate-800 border border-sky-300 px-2 py-0.5 rounded text-[11px] font-medium shrink-0">DNI</button>
+                    <button onclick="insertTextIntoWordEditor('Calle Toledo 24, 1ª escalera, 2º derecha')" class="bg-white hover:bg-sky-100 text-slate-800 border border-sky-300 px-2 py-0.5 rounded text-[11px] font-medium shrink-0">Dirección</button>
+                </div>
+            </div>
+
+            <!-- Editable Word Document Surface -->
+            <div class="p-3 sm:p-5 bg-slate-200 overflow-y-auto flex-1 flex justify-center">
+                <div id="word-editable-surface" contenteditable="true" spellcheck="false" class="w-full max-w-[740px] bg-white shadow-xl rounded-sm p-5 sm:p-10 text-slate-900 outline-none focus:ring-2 focus:ring-sky-500 min-h-[420px] prose max-w-none" style="font-family: Georgia, 'Times New Roman', serif; font-size: 14px; line-height: 1.55;">
+                </div>
+            </div>
+
+            <!-- Footer Actions -->
+            <div class="p-3 bg-slate-900 text-white border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div class="text-[11px] text-slate-300 hidden sm:block">
+                    <i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i>
+                    Al pulsar el botón verde se convierte en PDF A4 listo para estampar tus datos y firmas.
+                </div>
+                <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button onclick="closeModal('modal-word-bridge')" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">
+                        Cancelar
+                    </button>
+                    <button id="btn-convert-word-to-pdf" onclick="convertEditedWordAndLoadAsPDF()" class="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold shadow-lg flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-file-pdf"></i>
+                        <span>Convertir a Lienzo PDF para Rellenar y Firmar</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white px-4 py-2 rounded-full shadow-2xl border border-slate-700 text-xs font-medium z-50 hidden flex items-center gap-2 transition-all">
+        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+        <span id="toast-msg">Acción completada</span>
+    </div>
+
+    <script>
+        // ============================================================================
+        // CONFIGURE PDF.JS WORKER
+        // ============================================================================
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // ============================================================================
+        // APPLICATION STATE & STORAGE KEYS
+        // ============================================================================
+        const STORAGE_CHIPS_KEY = 'pdf_smart_saved_chips_v1';
+        const STORAGE_SIGS_KEY  = 'pdf_smart_saved_sigs_v1';
+        const STORAGE_DNIS_KEY  = 'pdf_smart_saved_dnis_v1';
+
+        let currentPdfBytes = null;       // Uint8Array of the active PDF
+        let pdfJsDoc = null;              // PDF.js document instance
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentZoom = 1.0;
+        let baseViewportWidth = 595;      // Standard A4 point width at 1x
+        let baseViewportHeight = 842;     // Standard A4 point height at 1x
+
+        // Placed elements on the PDF:
+        // { id, page, type: 'text'|'signature'|'image', xRatio, yRatio, text, fontSize, color, imageData, widthRatio, heightRatio }
+        let placedElements = [];
+        let selectedElementId = null;
+        let editingElementId = null;
+
+        // Last tapped relative position (0.0 to 1.0) on the current PDF page
+        let lastTapPosition = { xRatio: 0.22, yRatio: 0.28 };
+
+        // Persistent Memory Arrays
+        let savedChips = [];
+        let savedSignatures = [];
+        let savedDniDocs = [];
+
+        // Current Document Attachments Queue (appended at the end when exporting PDF)
+        // Item types:
+        // 1) { id, type: 'dni_pair', title, frontDataUrl, backDataUrl, pageCount: 1 }
+        // 2) { id, type: 'image_page', title, imageDataUrl, layout: 'single'|'half', pageCount: 1 }
+        // 3) { id, type: 'external_pdf', title, fileName, pdfBytes (Uint8Array), pageCount }
+        let attachmentsQueue = [];
+
+        // Temporary DNI Builder State (inside Modal 4)
+        let dniDraft = {
+            frontDataUrl: null,
+            backDataUrl: null
+        };
+
+        // Last exported PDF Blob & File for re-downloading or native mobile sharing
+        let lastExportedBlob = null;
+        let lastExportedFileName = 'Formulario_y_Anexos_Completo.pdf';
+
+        // Word (.docx) state when loaded as main document
+        let currentWordHtmlContent = null;
+        let currentWordFileName = null;
+
+        // Image to PDF & Drag reordering state
+        let isCreatedFromImages = false;
+        let draggedQueueIndex = null;
+
+        // Signature Pad State
+        let sigPadCanvas, sigPadCtx;
+        let isDrawingSig = false;
+        let sigInkColor = '#1d4ed8';
+        let sigHasStrokes = false;
+
+        // ============================================================================
+        // INITIALIZATION ON LOAD & KEYBOARD SHORTCUTS
+        // ============================================================================
+        window.onload = async function () {
+            loadSavedMemory();
+            initSignaturePad();
+            initKeyboardShortcuts();
+            // Automatically generate and load the Sample Confirmation Form so the user can test right away
+            await loadSampleConfirmationPDF(true);
+            updateAttachmentsBadgesAndSummary();
+        };
+
+        function initKeyboardShortcuts() {
+            window.addEventListener('keydown', (e) => {
+                // If user is typing in an input, textarea or contenteditable, ignore
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+                    return;
+                }
+
+                const item = getSelectedElement();
+                if (!item) return;
+
+                // Shift key nudges 5px for faster movement; standard arrow nudges 1px for exact precision
+                const step = e.shiftKey ? 5 : 1;
+
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    nudgeSelected(-step, 0);
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    nudgeSelected(step, 0);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    nudgeSelected(0, -step);
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    nudgeSelected(0, step);
+                } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                    e.preventDefault();
+                    deleteSelected();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    deselectAll();
+                } else if (e.key === '+' || e.key === '=') {
+                    e.preventDefault();
+                    resizeSelected(1);
+                } else if (e.key === '-' || e.key === '_') {
+                    e.preventDefault();
+                    resizeSelected(-1);
+                }
+            });
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = message;
+            toast.classList.remove('hidden');
+            clearTimeout(window.toastTimer);
+            window.toastTimer = setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 2800);
+        }
+
+        // ============================================================================
+        // PERSISTENT MEMORY (LOCALSTORAGE) FOR CHIPS, SIGNATURES & FREQUENT DNIs
+        // ============================================================================
+        function loadSavedMemory() {
+            try {
+                const rawChips = localStorage.getItem(STORAGE_CHIPS_KEY);
+                if (rawChips) {
+                    savedChips = JSON.parse(rawChips);
+                } else {
+                    savedChips = [
+                        { id: 'c1', label: 'Nombre completo', value: 'Lucas Vázquez Muñoz' },
+                        { id: 'c2', label: 'Dirección', value: 'Calle Toledo 24, 1ª escalera, 2º derecha' },
+                        { id: 'c3', label: 'DNI', value: '12345678Z' },
+                        { id: 'c4', label: 'Fecha Nacimiento', value: '15/05/1982' },
+                        { id: 'c5', label: 'Teléfono', value: '600 123 456' }
+                    ];
+                    saveChipsToStorage();
+                }
+
+                const rawSigs = localStorage.getItem(STORAGE_SIGS_KEY);
+                if (rawSigs) {
+                    savedSignatures = JSON.parse(rawSigs);
+                } else {
+                    savedSignatures = createDefaultDemoSignatures();
+                    saveSignaturesToStorage();
+                }
+
+                const rawDnis = localStorage.getItem(STORAGE_DNIS_KEY);
+                if (rawDnis) {
+                    savedDniDocs = JSON.parse(rawDnis);
+                } else {
+                    // Create a realistic demo saved DNI pair so user can test 1-click DNI attachment immediately
+                    const demoPair = generateDemoDniImages('LUCAS VÁZQUEZ MUÑOZ', '12345678Z', 'CALLE TOLEDO 24, 1º ESC, 2º DCHA');
+                    savedDniDocs = [
+                        {
+                            id: 'dni_demo_1',
+                            title: 'DNI - Lucas Vázquez Muñoz (Anverso y Reverso)',
+                            frontDataUrl: demoPair.front,
+                            backDataUrl: demoPair.back
+                        }
+                    ];
+                    saveDnisToStorage();
+                }
+            } catch (e) {
+                console.error('Error loading localStorage:', e);
+            }
+            renderQuickChipsUI();
+            renderSignaturesUI();
+            renderSavedDnisUI();
+        }
+
+        function saveChipsToStorage() {
+            try {
+                localStorage.setItem(STORAGE_CHIPS_KEY, JSON.stringify(savedChips));
+            } catch (e) {
+                console.error(e);
+            }
+            renderQuickChipsUI();
+        }
+
+        function saveSignaturesToStorage() {
+            try {
+                localStorage.setItem(STORAGE_SIGS_KEY, JSON.stringify(savedSignatures));
+            } catch (e) {
+                console.error(e);
+            }
+            renderSignaturesUI();
+        }
+
+        function saveDnisToStorage() {
+            try {
+                localStorage.setItem(STORAGE_DNIS_KEY, JSON.stringify(savedDniDocs));
+            } catch (e) {
+                console.error('Storage quota exceeded or error:', e);
+                showToast('Aviso: Memoria llena para guardar más fotos en caché');
+            }
+            renderSavedDnisUI();
+        }
+
+        // Generate two clean transparent demo signatures so the user can test immediately
+        function createDefaultDemoSignatures() {
+            const makeDemoSig = (text, sub, color) => {
+                const c = document.createElement('canvas');
+                c.width = 320;
+                c.height = 110;
+                const ctx = c.getContext('2d');
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
+                ctx.lineWidth = 2.6;
+                ctx.lineCap = 'round';
+                ctx.font = 'italic 30px Georgia, serif';
+                ctx.fillText(text, 25, 58);
+                // Flourish rubric line
+                ctx.beginPath();
+                ctx.moveTo(20, 72);
+                ctx.bezierCurveTo(110, 45, 220, 95, 290, 52);
+                ctx.stroke();
+                return c.toDataURL('image/png');
+            };
+            return [
+                { id: 's1', name: 'Firma Lucas (Padre)', dataUrl: makeDemoSig('Lucas Vázquez', '', '#1d4ed8') },
+                { id: 's2', name: 'Firma Mujer (Madre)', dataUrl: makeDemoSig('Elena Gómez', '', '#0f172a') }
+            ];
+        }
+
+        function renderQuickChipsUI() {
+            const strip = document.getElementById('quick-chips-strip');
+            const list = document.getElementById('saved-chips-list');
+            const badge = document.getElementById('saved-count-badge');
+
+            badge.textContent = savedChips.length;
+            strip.innerHTML = '';
+            list.innerHTML = '';
+
+            savedChips.forEach((chip) => {
+                // 1. Bottom bar pill button
+                const pill = document.createElement('button');
+                pill.className = 'shrink-0 bg-slate-800 hover:bg-blue-900/70 active:scale-95 text-slate-100 border border-slate-700 hover:border-blue-500 px-3 py-1 rounded-full text-xs font-medium transition flex items-center gap-1.5 max-w-[230px]';
+                pill.onclick = () => insertQuickText(chip.value, 13);
+                pill.innerHTML = `
+                    <span class="text-blue-400 font-semibold text-[10px] uppercase">${escapeHtml(chip.label || 'Dato')}:</span>
+                    <span class="truncate">${escapeHtml(chip.value)}</span>
+                `;
+                strip.appendChild(pill);
+
+                // 2. Modal list row
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between gap-2 bg-slate-50 hover:bg-blue-50/60 p-2.5 rounded-xl border border-slate-200 transition';
+                row.innerHTML = `
+                    <div class="flex-1 min-w-0 cursor-pointer" onclick="insertChipAndClose('${chip.id}')">
+                        <span class="inline-block text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded-md mb-0.5">${escapeHtml(chip.label || 'Guardado')}</span>
+                        <p class="text-sm font-semibold text-slate-800 truncate">${escapeHtml(chip.value)}</p>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button onclick="insertChipAndClose('${chip.id}')" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">
+                            Usar
+                        </button>
+                        <button onclick="deleteSavedChip('${chip.id}')" class="w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center" title="Borrar de la memoria">
+                            <i class="fa-solid fa-trash-can text-xs"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        function insertChipAndClose(chipId) {
+            const chip = savedChips.find(c => c.id === chipId);
+            if (chip) {
+                insertQuickText(chip.value, 13);
+                closeModal('modal-saved-data');
+            }
+        }
+
+        function addChipFromManager() {
+            const labelEl = document.getElementById('new-chip-label');
+            const valEl = document.getElementById('new-chip-value');
+            const value = valEl.value.trim();
+            const label = labelEl.value.trim() || 'Dato';
+
+            if (!value) {
+                showToast('Escribe un dato para guardarlo');
+                return;
+            }
+
+            savedChips.unshift({
+                id: 'chip_' + Date.now(),
+                label,
+                value
+            });
+            saveChipsToStorage();
+            labelEl.value = '';
+            valEl.value = '';
+            showToast('Dato guardado para siempre');
+        }
+
+        function deleteSavedChip(id) {
+            savedChips = savedChips.filter(c => c.id !== id);
+            saveChipsToStorage();
+            showToast('Dato eliminado de la memoria');
+        }
+
+        // ============================================================================
+        // GENERATE SAMPLE CONFIRMATION PDF ("PDF DE PRUEBA") OR LOAD USER PDF
+        // ============================================================================
+        async function loadSampleConfirmationPDF(isInitial = false) {
+            try {
+                const { PDFDocument, StandardFonts, rgb } = PDFLib;
+                const pdfDoc = await PDFDocument.create();
+                const page = pdfDoc.addPage([595.28, 841.89]); // A4
+                const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+                const fontReg = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+                const dark = rgb(0.12, 0.16, 0.23);
+                const gray = rgb(0.45, 0.5, 0.58);
+                const lineCol = rgb(0.65, 0.7, 0.78);
+
+                // Header Banner
+                page.drawRectangle({ x: 40, y: 745, width: 515, height: 60, color: rgb(0.94, 0.96, 0.99), borderColor: rgb(0.2, 0.4, 0.7), borderWidth: 1.2 });
+                page.drawText('PARROQUIA SANTA MARÍA - DIÓCESIS DE MADRID', { x: 115, y: 780, size: 13, font: fontBold, color: rgb(0.1, 0.25, 0.55) });
+                page.drawText('SOLICITUD DE INSCRIPCIÓN PARA EL SACRAMENTO DE LA CONFIRMACIÓN', { x: 78, y: 758, size: 10.5, font: fontBold, color: dark });
+
+                // Notice explaining the narrow boxes
+                page.drawText('1. DATOS PERSONALES DELCONFIRMANDO/A (Rellenar con letra clara sin salirse de la casilla):', { x: 45, y: 715, size: 10, font: fontBold, color: dark });
+
+                // Helper to draw narrow boxes like the ones that cut off in Adobe Acrobat
+                const drawFieldBox = (label, x, y, w, h) => {
+                    page.drawText(label, { x, y: y + h + 4, size: 8.5, font: fontBold, color: gray });
+                    page.drawRectangle({ x, y, width: w, height: h, borderColor: lineCol, borderWidth: 1, color: rgb(1, 1, 1) });
+                };
+
+                // Row 1: Nombre y Apellidos (tight box) + DNI + Fecha Nacimiento
+                drawFieldBox('NOMBRE Y APELLIDOS COMPLETOS:', 45, 665, 235, 26);
+                drawFieldBox('DNI / NIE:', 295, 665, 115, 26);
+                drawFieldBox('FECHA DE NACIMIENTO:', 425, 665, 130, 26);
+
+                // Row 2: Dirección Completa (intentionally narrow to test "Calle Toledo 24, 1ª escalera, 2º derecha")
+                drawFieldBox('DIRECCIÓN COMPLETA (Calle, Nº, Escalera, Piso, Puerta):', 45, 610, 310, 26);
+                drawFieldBox('TELÉFONO DE CONTACTO:', 370, 610, 185, 26);
+
+                // Row 3: Bautismo info
+                drawFieldBox('BAUTIZADO/A EN LA PARROQUIA DE:', 45, 555, 310, 26);
+                drawFieldBox('LOCALIDAD / PROVINCIA:', 370, 555, 185, 26);
+
+                // Row 4: Checkboxes section
+                page.drawText('2. DOCUMENTACIÓN QUE SE ADJUNTA (Marcar con una X o ✓):', { x: 45, y: 520, size: 10, font: fontBold, color: dark });
+                
+                const drawCheckOption = (text, x, y) => {
+                    page.drawRectangle({ x, y, width: 16, height: 16, borderColor: dark, borderWidth: 1 });
+                    page.drawText(text, { x: x + 24, y: y + 4, size: 9.5, font: fontReg, color: dark });
+                };
+                drawCheckOption('Partida de Bautismo actualizada', 55, 492);
+                drawCheckOption('Fotocopia del DNI del solicitante', 300, 492);
+                drawCheckOption('Autorización paterna / materna firmada', 55, 465);
+                drawCheckOption('Acepto comunicaciones de la Parroquia', 300, 465);
+
+                // Row 5: Parent Names
+                page.drawText('3. DATOS FAMILIARES Y AUTORIZACIÓN:', { x: 45, y: 430, size: 10, font: fontBold, color: dark });
+                drawFieldBox('NOMBRE Y APELLIDOS DEL PADRE / TUTOR:', 45, 380, 250, 26);
+                drawFieldBox('NOMBRE Y APELLIDOS DE LA MADRE / TUTORA:', 305, 380, 250, 26);
+
+                // Row 6: Date & Place
+                page.drawText('En Madrid, a fecha:', { x: 45, y: 342, size: 9.5, font: fontReg, color: dark });
+                page.drawLine({ start: { x: 140, y: 340 }, end: { x: 280, y: 340 }, thickness: 1, color: lineCol });
+
+                // Row 7: Dual Signature Boxes (Father & Mother)
+                page.drawRectangle({ x: 45, y: 195, width: 245, height: 115, borderColor: lineCol, borderWidth: 1 });
+                page.drawText('FIRMA DEL PADRE / TUTOR:', { x: 55, y: 295, size: 8.5, font: fontBold, color: gray });
+
+                page.drawRectangle({ x: 310, y: 195, width: 245, height: 115, borderColor: lineCol, borderWidth: 1 });
+                page.drawText('FIRMA DE LA MADRE / TUTORA:', { x: 320, y: 295, size: 8.5, font: fontBold, color: gray });
+
+                page.drawText('Nota: Con esta app tus textos largos y apellidos ("Muñoz", "2º derecha") jamás se cortan.', { x: 85, y: 160, size: 9, font: fontReg, color: rgb(0.2, 0.4, 0.7) });
+
+                const pdfBytes = await pdfDoc.save();
+                currentWordHtmlContent = null;
+                document.getElementById('word-source-pill').classList.add('hidden');
+                await loadPdfFromBytes(pdfBytes);
+
+                // If initial load, pre-place the user's two problematic examples so they immediately see them working uncut!
+                if (isInitial) {
+                    placedElements = [
+                        {
+                            id: 'demo_name',
+                            page: 1,
+                            type: 'text',
+                            xRatio: 0.088,
+                            yRatio: 0.190,
+                            text: 'Lucas Vázquez Muñoz',
+                            fontSize: 13,
+                            color: '#1d4ed8'
+                        },
+                        {
+                            id: 'demo_addr',
+                            page: 1,
+                            type: 'text',
+                            xRatio: 0.088,
+                            yRatio: 0.256,
+                            text: 'Calle Toledo 24, 1ª escalera, 2º derecha',
+                            fontSize: 11.5,
+                            color: '#1d4ed8'
+                        },
+                        {
+                            id: 'demo_check',
+                            page: 1,
+                            type: 'text',
+                            xRatio: 0.096,
+                            yRatio: 0.398,
+                            text: '✓',
+                            fontSize: 16,
+                            color: '#1d4ed8'
+                        }
+                    ];
+                    renderOverlays();
+                    selectElement('demo_addr');
+                    showToast('Formulario de prueba cargado. ¡Prueba a mover o cambiar el tamaño!');
+                } else {
+                    placedElements = [];
+                    deselectAll();
+                    renderOverlays();
+                    showToast('Formulario de Confirmación en blanco cargado');
+                }
+            } catch (err) {
+                console.error('Error generating demo PDF:', err);
+            }
+        }
+
+        async function handleFileUpload(event) {
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+
+            const isImage = (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name);
+            const allImages = files.every(isImage);
+
+            if (allImages) {
+                await handleCreatePdfFromImagesFiles(files);
+                event.target.value = '';
+                return;
+            }
+
+            const file = files[0];
+            const fileName = file.name || 'documento';
+            const lower = fileName.toLowerCase();
+
+            try {
+                // Check if user selected a Word file (.docx or .doc)
+                if (
+                    lower.endsWith('.docx') ||
+                    lower.endsWith('.doc') ||
+                    file.type.includes('word') ||
+                    file.type.includes('officedocument.wordprocessingml.document')
+                ) {
+                    await handleMainWordUpload(file);
+                    event.target.value = '';
+                    return;
+                }
+
+                if (isImage(file)) {
+                    await handleCreatePdfFromImagesFiles([file]);
+                    event.target.value = '';
+                    return;
+                }
+
+                // Otherwise load as PDF
+                const arrayBuffer = await file.arrayBuffer();
+                placedElements = [];
+                deselectAll();
+                isCreatedFromImages = false;
+                currentWordHtmlContent = null;
+                document.getElementById('word-source-pill').classList.add('hidden');
+                await loadPdfFromBytes(new Uint8Array(arrayBuffer));
+                showToast('PDF cargado: ' + file.name);
+            } catch (err) {
+                console.error('Error reading uploaded file:', err);
+                showToast('No se pudo abrir el archivo seleccionado');
+            }
+            event.target.value = '';
+        }
+
+        async function handleCreatePdfFromImagesUpload(event) {
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+            await handleCreatePdfFromImagesFiles(files);
+            event.target.value = '';
+        }
+
+        async function handleCreatePdfFromImagesFiles(files) {
+            if (!files || !files.length) return;
+            try {
+                showToast(`Convirtiendo ${files.length} imagen(es) en documento PDF...`);
+                const { PDFDocument } = PDFLib;
+                const pdfDoc = await PDFDocument.create();
+
+                placedElements = [];
+                deselectAll();
+                currentWordHtmlContent = null;
+                document.getElementById('word-source-pill').classList.add('hidden');
+                attachmentsQueue = [];
+                isCreatedFromImages = true;
+
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const dataUrl = await compressAndNormalizeImage(file, 1600, 0.90);
+                    const embeddedImg = await embedDataUrlImage(pdfDoc, dataUrl);
+
+                    const a4W = 595.28;
+                    const a4H = 841.89;
+                    const page = pdfDoc.addPage([a4W, a4H]);
+                    const maxW = a4W - 40;
+                    const maxH = a4H - 40;
+                    const dims = embeddedImg.scaleToFit(maxW, maxH);
+
+                    page.drawImage(embeddedImg, {
+                        x: (a4W - dims.width) / 2,
+                        y: (a4H - dims.height) / 2,
+                        width: dims.width,
+                        height: dims.height
+                    });
+
+                    attachmentsQueue.push({
+                        id: 'annex_img_' + Date.now() + '_' + i,
+                        type: 'image_page',
+                        title: file.name ? file.name.replace(/\.[^/.]+$/, '') : `Imagen ${i + 1}`,
+                        imageDataUrl: dataUrl,
+                        pageCount: 1
+                    });
+                }
+
+                const generatedBytes = await pdfDoc.save();
+                await loadPdfFromBytes(generatedBytes);
+                updateAttachmentsBadgesAndSummary();
+                showToast(`¡PDF creado con ${files.length} foto(s)! Puedes reordenarlas arrastrándolas en "Anexos"`);
+            } catch (err) {
+                console.error('Error creating PDF from images:', err);
+                showToast('No se pudieron procesar las imágenes seleccionadas');
+            }
+        }
+
+        async function rebuildPdfFromAttachmentsQueue() {
+            if (!isCreatedFromImages || attachmentsQueue.length === 0) {
+                updateAttachmentsBadgesAndSummary();
+                return;
+            }
+            try {
+                showToast('Reordenando páginas del documento...');
+                const { PDFDocument } = PDFLib;
+                const pdfDoc = await PDFDocument.create();
+
+                for (let i = 0; i < attachmentsQueue.length; i++) {
+                    const item = attachmentsQueue[i];
+                    if (item.type === 'image_page' && item.imageDataUrl) {
+                        const embeddedImg = await embedDataUrlImage(pdfDoc, item.imageDataUrl);
+                        const a4W = 595.28;
+                        const a4H = 841.89;
+                        const page = pdfDoc.addPage([a4W, a4H]);
+                        const maxW = a4W - 40;
+                        const maxH = a4H - 40;
+                        const dims = embeddedImg.scaleToFit(maxW, maxH);
+                        page.drawImage(embeddedImg, {
+                            x: (a4W - dims.width) / 2,
+                            y: (a4H - dims.height) / 2,
+                            width: dims.width,
+                            height: dims.height
+                        });
+                    }
+                }
+
+                const generatedBytes = await pdfDoc.save();
+                const savedPage = currentPage;
+                await loadPdfFromBytes(generatedBytes);
+                currentPage = Math.min(savedPage, totalPages);
+                await renderCurrentPage();
+                updateAttachmentsBadgesAndSummary();
+            } catch (err) {
+                console.error('Error rebuilding PDF from images:', err);
+                updateAttachmentsBadgesAndSummary();
+            }
+        }
+
+        // ============================================================================
+        // WORD (.DOCX / .DOC) TO A4 PDF CONVERTER & LIVE EDITOR
+        // ============================================================================
+        async function extractHtmlFromWordFile(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const lower = (file.name || '').toLowerCase();
+
+            // 1. Try Mammoth.js first (standard for .docx files)
+            if (window.mammoth) {
+                try {
+                    const result = await mammoth.convertToHtml({ arrayBuffer });
+                    if (result && result.value && result.value.trim().length > 0) {
+                        return result.value;
+                    }
+                } catch (mammothErr) {
+                    console.warn('Mammoth could not parse directly, trying fallback extractor:', mammothErr);
+                }
+            }
+
+            // 2. Fallback for legacy binary .doc files or simple text-based .doc files
+            const decoder = new TextDecoder('utf-8', { fatal: false });
+            const rawText = decoder.decode(new Uint8Array(arrayBuffer));
+            // Extract readable Spanish/Latin sentences of at least 4 chars
+            const cleanChunks = rawText
+                .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ')
+                .match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9,.;:()\/\-_ºª\s]{8,}/g);
+
+            if (cleanChunks && cleanChunks.length > 0) {
+                const filtered = cleanChunks
+                    .map(s => s.trim())
+                    .filter(s => s.length >= 8 && !/^(Normal|Default|Microsoft|Word|Times|Calibri|Arial|bjbj)/i.test(s));
+                if (filtered.length > 0) {
+                    return `
+                        <div style="border-bottom:2px solid #1e3a8a;padding-bottom:8px;margin-bottom:14px;">
+                            <h2 style="color:#1e3a8a;margin:0;">${escapeHtml(file.name)}</h2>
+                            <p style="font-size:12px;color:#475569;margin:2px 0 0 0;">Documento Word importado automáticamente a formato A4</p>
+                        </div>
+                        ${filtered.slice(0, 60).map(line => `<p>${escapeHtml(line)}</p>`).join('')}
+                    `;
+                }
+            }
+
+            return `
+                <h2>${escapeHtml(file.name)}</h2>
+                <p>Este archivo Word antiguo (.doc) ha sido abierto en modo edición. Puedes pegar o escribir el contenido aquí mismo y convertirlo a PDF.</p>
+            `;
+        }
+
+        async function handleMainWordUpload(file) {
+            showToast('Leyendo documento Word (' + file.name + ')...');
+            const htmlContent = await extractHtmlFromWordFile(file);
+            currentWordHtmlContent = htmlContent;
+            currentWordFileName = file.name;
+
+            document.getElementById('word-modal-title').textContent = 'Word cargado: ' + file.name;
+            document.getElementById('word-editable-surface').innerHTML = htmlContent;
+            openModal('modal-word-bridge');
+        }
+
+        function reopenWordEditorModal() {
+            if (!currentWordHtmlContent) return;
+            document.getElementById('word-editable-surface').innerHTML = currentWordHtmlContent;
+            openModal('modal-word-bridge');
+        }
+
+        function insertTextIntoWordEditor(textToInsert) {
+            const editor = document.getElementById('word-editable-surface');
+            editor.focus();
+            if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+                document.execCommand('insertText', false, textToInsert);
+            } else {
+                editor.innerHTML += ` <span>${escapeHtml(textToInsert)}</span> `;
+            }
+            showToast('Dato insertado en el texto de Word');
+        }
+
+        // Convert HTML string (from Word .docx) into multi-page A4 PDF Uint8Array using html2canvas + pdf-lib
+        async function convertWordHtmlToPdfBytes(htmlString) {
+            const host = document.getElementById('offscreen-word-host');
+            host.innerHTML = '';
+
+            const sheet = document.createElement('div');
+            sheet.className = 'word-a4-sheet';
+            sheet.innerHTML = htmlString;
+            host.appendChild(sheet);
+
+            // Wait a brief tick for layout & fonts
+            await new Promise(r => setTimeout(r, 80));
+
+            const canvas = await html2canvas(sheet, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                width: 794,
+                windowWidth: 794
+            });
+
+            host.innerHTML = '';
+
+            const { PDFDocument } = PDFLib;
+            const pdfDoc = await PDFDocument.create();
+
+            // Slice tall canvas into standard A4 pages (794px x 1123px at 1x -> 1588px x 2246px at 2x)
+            const pageCanvasWidth = canvas.width;
+            const pageCanvasHeight = Math.round((canvas.width * 841.89) / 595.28);
+            const totalSlices = Math.max(1, Math.ceil(canvas.height / pageCanvasHeight));
+
+            for (let i = 0; i < totalSlices; i++) {
+                const sliceCanvas = document.createElement('canvas');
+                sliceCanvas.width = pageCanvasWidth;
+                sliceCanvas.height = pageCanvasHeight;
+                const sCtx = sliceCanvas.getContext('2d');
+                sCtx.fillStyle = '#ffffff';
+                sCtx.fillRect(0, 0, pageCanvasWidth, pageCanvasHeight);
+
+                const sy = i * pageCanvasHeight;
+                const sh = Math.min(pageCanvasHeight, canvas.height - sy);
+
+                if (sh > 0) {
+                    sCtx.drawImage(canvas, 0, sy, pageCanvasWidth, sh, 0, 0, pageCanvasWidth, sh);
+                }
+
+                const sliceJpgUrl = sliceCanvas.toDataURL('image/jpeg', 0.92);
+                const embeddedPageImg = await pdfDoc.embedJpg(sliceJpgUrl);
+                const pdfPage = pdfDoc.addPage([595.28, 841.89]);
+                pdfPage.drawImage(embeddedPageImg, {
+                    x: 0,
+                    y: 0,
+                    width: 595.28,
+                    height: 841.89
+                });
+            }
+
+            return await pdfDoc.save();
+        }
+
+        async function convertEditedWordAndLoadAsPDF() {
+            const btn = document.getElementById('btn-convert-word-to-pdf');
+            const origHtml = btn.innerHTML;
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Convirtiendo Word a PDF A4...';
+
+                const editedHtml = document.getElementById('word-editable-surface').innerHTML;
+                currentWordHtmlContent = editedHtml;
+
+                const pdfBytes = await convertWordHtmlToPdfBytes(editedHtml);
+                placedElements = [];
+                deselectAll();
+                await loadPdfFromBytes(pdfBytes);
+
+                document.getElementById('word-source-pill').classList.remove('hidden');
+                closeModal('modal-word-bridge');
+                showToast('¡Word convertido a PDF! Ahora puedes tocar cualquier línea o firmar encima');
+            } catch (err) {
+                console.error('Error converting Word to PDF:', err);
+                showToast('Hubo un problema al convertir el documento Word');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+        }
+
+        // Built-in Sample Word (.docx) Document so the user can test how Word -> PDF works with 1 tap!
+        async function loadSampleWordDocument() {
+            const sampleWordHtml = `
+                <div style="border: 2px solid #1e3a8a; padding: 14px 18px; background: #f8fafc; margin-bottom: 18px;">
+                    <h2 style="margin: 0; color: #1e3a8a; font-size: 17px; text-align: center;">PARROQUIA / COLEGIO SAN ISIDRO - MADRID</h2>
+                    <p style="margin: 4px 0 0 0; text-align: center; font-size: 12.5px; font-weight: bold; color: #334155;">
+                        DOCUMENTO WORD (.DOCX) DE AUTORIZACIÓN Y FICHA FAMILIAR
+                    </p>
+                </div>
+
+                <p style="font-size: 13.5px;">
+                    <em>(Este es un ejemplo de archivo <strong>Word .docx</strong> convertido automáticamente en PDF por tu aplicación para que puedas rellenarlo sin que se descuadre nada).</em>
+                </p>
+
+                <h3 style="font-size: 14px; color: #1e3a8a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px;">1. DATOS DEL SOLICITANTE / ALUMNO</h3>
+                <table>
+                    <tr>
+                        <td style="width: 60%;"><strong>Nombre y Apellidos:</strong><br><br></td>
+                        <td style="width: 40%;"><strong>DNI / NIE:</strong><br><br></td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"><strong>Domicilio completo (Calle, Nº, Escalera, Piso):</strong><br><br></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fecha de Nacimiento:</strong><br><br></td>
+                        <td><strong>Teléfono de urgencia:</strong><br><br></td>
+                    </tr>
+                </table>
+
+                <h3 style="font-size: 14px; color: #1e3a8a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px;">2. DECLARACIÓN Y AUTORIZACIÓN EXPRESA</h3>
+                <p style="text-align: justify;">
+                    Por medio del presente documento, D./Dña. _____________________________________________, con DNI ______________________, autoriza la inscripción en las actividades de Confirmación / Catequesis del curso actual y declara que los datos aportados junto con las copias del DNI adjuntas al final de este PDF son veraces.
+                </p>
+
+                <p style="margin-top: 18px;">En Madrid, a fecha: ___________________________________</p>
+
+                <table style="margin-top: 24px;">
+                    <tr>
+                        <td style="width: 50%; height: 120px;"><strong>Firma del Padre / Tutor:</strong></td>
+                        <td style="width: 50%; height: 120px;"><strong>Firma de la Madre / Tutora:</strong></td>
+                    </tr>
+                </table>
+            `;
+
+            currentWordHtmlContent = sampleWordHtml;
+            currentWordFileName = 'Autorizacion_Confirmacion_Ejemplo.docx';
+            showToast('Convirtiendo archivo Word (.docx) de prueba a lienzo PDF...');
+
+            const pdfBytes = await convertWordHtmlToPdfBytes(sampleWordHtml);
+            await loadPdfFromBytes(pdfBytes);
+            document.getElementById('word-source-pill').classList.remove('hidden');
+
+            // Pre-place sample non-cut-off fields on top of the converted Word table so user sees it in action immediately
+            placedElements = [
+                {
+                    id: 'word_demo_name',
+                    page: 1,
+                    type: 'text',
+                    xRatio: 0.105,
+                    yRatio: 0.258,
+                    text: 'Lucas Vázquez Muñoz',
+                    fontSize: 13.5,
+                    color: '#1d4ed8'
+                },
+                {
+                    id: 'word_demo_dni',
+                    page: 1,
+                    type: 'text',
+                    xRatio: 0.60,
+                    yRatio: 0.258,
+                    text: '12345678Z',
+                    fontSize: 13.5,
+                    color: '#1d4ed8'
+                },
+                {
+                    id: 'word_demo_addr',
+                    page: 1,
+                    type: 'text',
+                    xRatio: 0.105,
+                    yRatio: 0.322,
+                    text: 'Calle Toledo 24, 1ª escalera, 2º derecha',
+                    fontSize: 13,
+                    color: '#1d4ed8'
+                }
+            ];
+            renderOverlays();
+            selectElement('word_demo_addr');
+            showToast('¡Word (.docx) convertido a PDF y rellenado! También puedes pulsar "Editar texto Word" arriba');
+        }
+
+        async function loadPdfFromBytes(bytes) {
+            currentPdfBytes = bytes;
+            const loadingTask = pdfjsLib.getDocument({ data: bytes.slice(0) });
+            pdfJsDoc = await loadingTask.promise;
+            totalPages = pdfJsDoc.numPages;
+            currentPage = 1;
+
+            // Fit width automatically on mobile screens
+            const workspaceWidth = document.getElementById('pdf-workspace').clientWidth - 24;
+            const firstPage = await pdfJsDoc.getPage(1);
+            const unscaledViewport = firstPage.getViewport({ scale: 1 });
+            baseViewportWidth = unscaledViewport.width;
+            baseViewportHeight = unscaledViewport.height;
+
+            if (workspaceWidth < baseViewportWidth) {
+                currentZoom = Math.max(0.55, +(workspaceWidth / baseViewportWidth).toFixed(2));
+            } else {
+                currentZoom = 1.0;
+            }
+
+            await renderCurrentPage();
+        }
+
+        async function renderCurrentPage() {
+            if (!pdfJsDoc) return;
+            const page = await pdfJsDoc.getPage(currentPage);
+
+            const cssWidth = Math.round(baseViewportWidth * currentZoom);
+            const cssHeight = Math.round(baseViewportHeight * currentZoom);
+
+            const stage = document.getElementById('pdf-stage');
+            stage.style.width = cssWidth + 'px';
+            stage.style.height = cssHeight + 'px';
+
+            // Render at 2x devicePixelRatio for crisp text on mobile Retina screens
+            const pixelRatio = Math.max(window.devicePixelRatio || 1, 2);
+            const viewport = page.getViewport({ scale: currentZoom * pixelRatio });
+
+            const canvas = document.getElementById('pdf-canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({ canvasContext: context, viewport }).promise;
+
+            // Update UI indicators
+            document.getElementById('page-indicator').textContent = `Pág ${currentPage} / ${totalPages}`;
+            document.getElementById('btn-prev-page').disabled = currentPage <= 1;
+            document.getElementById('btn-next-page').disabled = currentPage >= totalPages;
+            document.getElementById('zoom-indicator').textContent = `${Math.round(currentZoom * 100)}%`;
+
+            renderOverlays();
+        }
+
+        function changePage(delta) {
+            const next = currentPage + delta;
+            if (next < 1 || next > totalPages) return;
+            currentPage = next;
+            deselectAll();
+            renderCurrentPage();
+        }
+
+        function adjustZoom(delta) {
+            currentZoom = Math.min(2.2, Math.max(0.5, +(currentZoom + delta).toFixed(2)));
+            renderCurrentPage();
+        }
+
+        // ============================================================================
+        // FREE-POSITIONING OVERLAYS (TEXT & TRANSPARENT SIGNATURES)
+        // ============================================================================
+        function handleStageTap(event) {
+            if (event.target.id !== 'overlay-layer') return;
+
+            const rect = event.currentTarget.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+
+            lastTapPosition = {
+                xRatio: Math.max(0.01, Math.min(0.98, clickX / rect.width)),
+                yRatio: Math.max(0.01, Math.min(0.98, clickY / rect.height))
+            };
+
+            // Show tap crosshair indicator at exact tap coordinates
+            const indicator = document.getElementById('tap-indicator');
+            indicator.style.left = (lastTapPosition.xRatio * 100) + '%';
+            indicator.style.top = (lastTapPosition.yRatio * 100) + '%';
+            indicator.classList.remove('hidden');
+
+            if (selectedElementId) {
+                deselectAll();
+            } else {
+                document.getElementById('status-hint').textContent = 'Punto exacto marcado: escribe o toca un Dato Rápido abajo';
+            }
+        }
+
+        function handleStageDoubleClick(event) {
+            if (event.target.id !== 'overlay-layer') return;
+            handleStageTap(event);
+            openAddTextModal();
+        }
+
+        function renderOverlays() {
+            const layer = document.getElementById('overlay-layer');
+            layer.innerHTML = '';
+
+            const stageWidth = baseViewportWidth * currentZoom;
+            const stageHeight = baseViewportHeight * currentZoom;
+
+            const pageItems = placedElements.filter(el => el.page === currentPage);
+
+            pageItems.forEach(item => {
+                const el = document.createElement('div');
+                el.dataset.id = item.id;
+                el.className = 'overlay-item' + (item.id === selectedElementId ? ' selected' : '');
+                el.style.left = (item.xRatio * stageWidth) + 'px';
+                el.style.top = (item.yRatio * stageHeight) + 'px';
+
+                if (item.type === 'text') {
+                    el.style.fontSize = (item.fontSize * currentZoom) + 'px';
+                    el.style.color = item.color || '#0f172a';
+                    el.style.fontFamily = 'Helvetica, Arial, sans-serif';
+                    el.style.fontWeight = '500';
+                    el.style.padding = '1px 3px';
+                    el.textContent = item.text;
+                } else if (item.type === 'signature' || item.type === 'image') {
+                    const w = (item.widthRatio || 0.24) * stageWidth;
+                    const h = (item.heightRatio || 0.08) * stageHeight;
+                    el.style.width = w + 'px';
+                    el.style.height = h + 'px';
+                    const img = document.createElement('img');
+                    img.src = item.imageData;
+                    img.className = 'w-full h-full object-contain pointer-events-none select-none';
+                    el.appendChild(img);
+                }
+
+                // Make draggable via Mouse & Touch with Pointer Events
+                attachDragBehavior(el, item);
+                layer.appendChild(el);
+            });
+
+            updateSelectionToolbarUI();
+        }
+
+        function attachDragBehavior(domNode, item) {
+            let startPointerX = 0, startPointerY = 0;
+            let startLeft = 0, startTop = 0;
+            let isDragging = false;
+
+            const onPointerDown = (e) => {
+                if (e.button !== undefined && e.button !== 0) return;
+                e.stopPropagation();
+
+                selectElement(item.id);
+
+                const stageWidth = baseViewportWidth * currentZoom;
+                const stageHeight = baseViewportHeight * currentZoom;
+
+                startPointerX = e.clientX;
+                startPointerY = e.clientY;
+                startLeft = parseFloat(domNode.style.left) || (item.xRatio * stageWidth);
+                startTop = parseFloat(domNode.style.top) || (item.yRatio * stageHeight);
+                isDragging = true;
+
+                domNode.style.cursor = 'grabbing';
+                if (domNode.setPointerCapture) {
+                    try { domNode.setPointerCapture(e.pointerId); } catch (_) {}
+                }
+
+                const onPointerMove = (me) => {
+                    if (!isDragging) return;
+                    if (me.cancelable) me.preventDefault();
+
+                    const dx = me.clientX - startPointerX;
+                    const dy = me.clientY - startPointerY;
+
+                    const curW = baseViewportWidth * currentZoom;
+                    const curH = baseViewportHeight * currentZoom;
+
+                    const newLeft = Math.max(0, Math.min(curW - 10, startLeft + dx));
+                    const newTop = Math.max(0, Math.min(curH - 10, startTop + dy));
+
+                    domNode.style.left = newLeft + 'px';
+                    domNode.style.top = newTop + 'px';
+
+                    item.xRatio = newLeft / curW;
+                    item.yRatio = newTop / curH;
+                };
+
+                const onPointerUp = (ue) => {
+                    if (!isDragging) return;
+                    isDragging = false;
+                    domNode.style.cursor = 'grab';
+
+                    if (domNode.releasePointerCapture) {
+                        try { domNode.releasePointerCapture(ue.pointerId); } catch (_) {}
+                    }
+
+                    domNode.removeEventListener('pointermove', onPointerMove);
+                    domNode.removeEventListener('pointerup', onPointerUp);
+                    domNode.removeEventListener('pointercancel', onPointerUp);
+                };
+
+                domNode.addEventListener('pointermove', onPointerMove);
+                domNode.addEventListener('pointerup', onPointerUp);
+                domNode.addEventListener('pointercancel', onPointerUp);
+            };
+
+            domNode.addEventListener('pointerdown', onPointerDown);
+
+            // Double click directly on an element to edit or resize
+            domNode.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                selectElement(item.id);
+                if (item.type === 'text') {
+                    openEditSelectedModal();
+                }
+            });
+        }
+
+        // ============================================================================
+        // SELECTION & FINE ADJUSTMENT CONTROLS (SIZE +/-, NUDGE ARROWS, COLOR)
+        // ============================================================================
+        function selectElement(id) {
+            selectedElementId = id;
+            const indicator = document.getElementById('tap-indicator');
+            if (indicator) indicator.classList.add('hidden');
+
+            const layer = document.getElementById('overlay-layer');
+            if (layer) {
+                Array.from(layer.children).forEach(child => {
+                    if (child.dataset.id === id) {
+                        child.classList.add('selected');
+                    } else {
+                        child.classList.remove('selected');
+                    }
+                });
+            }
+            updateSelectionToolbarUI();
+        }
+
+        function deselectAll() {
+            selectedElementId = null;
+            const layer = document.getElementById('overlay-layer');
+            if (layer) {
+                Array.from(layer.children).forEach(child => child.classList.remove('selected'));
+            }
+            updateSelectionToolbarUI();
+        }
+
+        function getSelectedElement() {
+            return placedElements.find(el => el.id === selectedElementId);
+        }
+
+        function updateSelectionToolbarUI() {
+            const toolbar = document.getElementById('selection-toolbar');
+            const item = getSelectedElement();
+            if (!item) {
+                toolbar.classList.add('hidden');
+                return;
+            }
+            toolbar.classList.remove('hidden');
+
+            const sizeLabel = document.getElementById('selected-size-label');
+            const colorControls = document.getElementById('text-color-controls');
+            const editBtn = document.getElementById('btn-edit-selected');
+
+            if (item.type === 'text') {
+                sizeLabel.textContent = `${item.fontSize}px`;
+                colorControls.classList.remove('hidden');
+                editBtn.classList.remove('hidden');
+            } else {
+                const pct = Math.round((item.widthRatio / 0.24) * 100);
+                sizeLabel.textContent = `${pct}%`;
+                colorControls.classList.add('hidden');
+                editBtn.classList.add('hidden');
+            }
+        }
+
+        function resizeSelected(delta) {
+            const item = getSelectedElement();
+            if (!item) return;
+
+            const stageWidth = baseViewportWidth * currentZoom;
+            const stageHeight = baseViewportHeight * currentZoom;
+            const layer = document.getElementById('overlay-layer');
+            const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
+
+            if (item.type === 'text') {
+                item.fontSize = Math.max(6, Math.min(48, +(item.fontSize + delta * 1).toFixed(0)));
+                if (domNode) {
+                    domNode.style.fontSize = (item.fontSize * currentZoom) + 'px';
+                }
+                const label = document.getElementById('selected-size-label');
+                if (label) label.textContent = `${item.fontSize}px`;
+            } else if (item.type === 'signature' || item.type === 'image') {
+                const factor = delta > 0 ? 1.08 : 0.92;
+                item.widthRatio = Math.max(0.06, Math.min(0.85, item.widthRatio * factor));
+                item.heightRatio = Math.max(0.02, Math.min(0.65, item.heightRatio * factor));
+                if (domNode) {
+                    domNode.style.width = (item.widthRatio * stageWidth) + 'px';
+                    domNode.style.height = (item.heightRatio * stageHeight) + 'px';
+                }
+                const label = document.getElementById('selected-size-label');
+                if (label) label.textContent = `${Math.round((item.widthRatio / 0.24) * 100)}%`;
+            }
+        }
+
+        function nudgeSelected(dxPx, dyPx) {
+            const item = getSelectedElement();
+            if (!item) return;
+            const stageWidth = baseViewportWidth * currentZoom;
+            const stageHeight = baseViewportHeight * currentZoom;
+
+            item.xRatio = Math.max(0, Math.min(0.99, item.xRatio + (dxPx / stageWidth)));
+            item.yRatio = Math.max(0, Math.min(0.99, item.yRatio + (dyPx / stageHeight)));
+
+            const layer = document.getElementById('overlay-layer');
+            if (layer) {
+                const domNode = layer.querySelector(`[data-id="${item.id}"]`);
+                if (domNode) {
+                    domNode.style.left = (item.xRatio * stageWidth) + 'px';
+                    domNode.style.top = (item.yRatio * stageHeight) + 'px';
+                }
+            }
+        }
+
+        function setSelectedColor(hexColor) {
+            const item = getSelectedElement();
+            if (item && item.type === 'text') {
+                item.color = hexColor;
+                const layer = document.getElementById('overlay-layer');
+                if (layer) {
+                    const domNode = layer.querySelector(`[data-id="${item.id}"]`);
+                    if (domNode) {
+                        domNode.style.color = hexColor;
+                    }
+                }
+            }
+        }
+
+        function duplicateSelected() {
+            const item = getSelectedElement();
+            if (!item) return;
+            const copy = JSON.parse(JSON.stringify(item));
+            copy.id = 'el_' + Date.now();
+            copy.xRatio = Math.min(0.9, item.xRatio + 0.02);
+            copy.yRatio = Math.min(0.95, item.yRatio + 0.025);
+            placedElements.push(copy);
+            renderOverlays();
+            selectElement(copy.id);
+            showToast('Elemento duplicado');
+        }
+
+        function deleteSelected() {
+            if (!selectedElementId) return;
+            placedElements = placedElements.filter(el => el.id !== selectedElementId);
+            selectedElementId = null;
+            renderOverlays();
+            showToast('Elemento eliminado');
+        }
+
+        // ============================================================================
+        // INSERTING & EDITING TEXT
+        // ============================================================================
+        function insertQuickText(textValue, fontSize = 13, color = '#1d4ed8') {
+            const newId = 'txt_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+            
+            // Align baseline and left edge exactly to the tap indicator:
+            // Font baseline is approx 0.78 * fontSize from top edge; padding-left is 3px.
+            const yOffsetRatio = (fontSize * 0.78) / baseViewportHeight;
+            const xOffsetRatio = 3 / baseViewportWidth;
+
+            placedElements.push({
+                id: newId,
+                page: currentPage,
+                type: 'text',
+                xRatio: Math.max(0.005, Math.min(0.98, lastTapPosition.xRatio - xOffsetRatio)),
+                yRatio: Math.max(0.005, Math.min(0.98, lastTapPosition.yRatio - yOffsetRatio)),
+                text: textValue,
+                fontSize: fontSize,
+                color: color
+            });
+
+            renderOverlays();
+            selectElement(newId);
+            showToast('Texto colocado en la posición exacta. Arrástralo o usa las flechas.');
+        }
+
+        function insertTodayDate() {
+            const now = new Date();
+            const dd = String(now.getDate()).padStart(2, '0');
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const yyyy = now.getFullYear();
+            insertQuickText(`${dd}/${mm}/${yyyy}`, 13);
+        }
+
+        function openAddTextModal() {
+            editingElementId = null;
+            document.getElementById('modal-text-title').innerHTML = '<i class="fa-solid fa-keyboard text-blue-400"></i> Añadir Texto al PDF';
+            document.getElementById('input-text-value').value = '';
+            document.getElementById('input-chip-label').value = '';
+            document.getElementById('save-memory-box').classList.remove('hidden');
+            openModal('modal-add-text');
+            setTimeout(() => document.getElementById('input-text-value').focus(), 100);
+        }
+
+        function openEditSelectedModal() {
+            const item = getSelectedElement();
+            if (!item || item.type !== 'text') return;
+            editingElementId = item.id;
+            document.getElementById('modal-text-title').innerHTML = '<i class="fa-solid fa-pen text-blue-400"></i> Editar Texto';
+            document.getElementById('input-text-value').value = item.text;
+            document.getElementById('input-text-size').value = String(Math.round(item.fontSize));
+            document.getElementById('input-text-color').value = item.color || '#0f172a';
+            document.getElementById('save-memory-box').classList.add('hidden');
+            openModal('modal-add-text');
+        }
+
+        function confirmAddOrEditText() {
+            const textVal = document.getElementById('input-text-value').value.trim();
+            const fontSize = parseFloat(document.getElementById('input-text-size').value) || 14;
+            const color = document.getElementById('input-text-color').value || '#0f172a';
+
+            if (!textVal) {
+                showToast('Escribe algún texto primero');
+                return;
+            }
+
+            if (editingElementId) {
+                const item = placedElements.find(e => e.id === editingElementId);
+                if (item) {
+                    item.text = textVal;
+                    item.fontSize = fontSize;
+                    item.color = color;
+                }
+                editingElementId = null;
+                closeModal('modal-add-text');
+                renderOverlays();
+                showToast('Texto actualizado');
+                return;
+            }
+
+            // Save to persistent memory if checkbox is checked
+            const shouldSave = document.getElementById('check-save-chip').checked;
+            const customLabel = document.getElementById('input-chip-label').value.trim();
+
+            if (shouldSave) {
+                const alreadyExists = savedChips.some(c => c.value.toLowerCase() === textVal.toLowerCase());
+                if (!alreadyExists) {
+                    savedChips.unshift({
+                        id: 'chip_' + Date.now(),
+                        label: customLabel || 'Guardado',
+                        value: textVal
+                    });
+                    saveChipsToStorage();
+                }
+            }
+
+            insertQuickText(textVal, fontSize, color);
+            closeModal('modal-add-text');
+        }
+
+        // ============================================================================
+        // SIGNATURE PAD & MULTI-SIGNATURE MANAGER
+        // ============================================================================
+        function initSignaturePad() {
+            sigPadCanvas = document.getElementById('signature-pad');
+            sigPadCtx = sigPadCanvas.getContext('2d');
+            sigPadCtx.lineWidth = 2.8;
+            sigPadCtx.lineCap = 'round';
+            sigPadCtx.lineJoin = 'round';
+            sigPadCtx.strokeStyle = sigInkColor;
+
+            const getPos = (e) => {
+                const rect = sigPadCanvas.getBoundingClientRect();
+                const scaleX = sigPadCanvas.width / rect.width;
+                const scaleY = sigPadCanvas.height / rect.height;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * scaleX,
+                    y: (clientY - rect.top) * scaleY
+                };
+            };
+
+            const startDraw = (e) => {
+                if (e.cancelable) e.preventDefault();
+                isDrawingSig = true;
+                sigHasStrokes = true;
+                const pos = getPos(e);
+                sigPadCtx.beginPath();
+                sigPadCtx.moveTo(pos.x, pos.y);
+            };
+
+            const moveDraw = (e) => {
+                if (!isDrawingSig) return;
+                if (e.cancelable) e.preventDefault();
+                const pos = getPos(e);
+                sigPadCtx.lineTo(pos.x, pos.y);
+                sigPadCtx.stroke();
+            };
+
+            const endDraw = () => {
+                isDrawingSig = false;
+            };
+
+            sigPadCanvas.addEventListener('mousedown', startDraw);
+            sigPadCanvas.addEventListener('mousemove', moveDraw);
+            window.addEventListener('mouseup', endDraw);
+
+            sigPadCanvas.addEventListener('touchstart', startDraw, { passive: false });
+            sigPadCanvas.addEventListener('touchmove', moveDraw, { passive: false });
+            sigPadCanvas.addEventListener('touchend', endDraw);
+        }
+
+        function setSigPadColor(color) {
+            sigInkColor = color;
+            sigPadCtx.strokeStyle = color;
+            document.getElementById('sig-color-blue').className = 'w-5 h-5 rounded-full bg-blue-700 ' + (color === '#1d4ed8' ? 'ring-2 ring-offset-1 ring-blue-600' : '');
+            document.getElementById('sig-color-black').className = 'w-5 h-5 rounded-full bg-slate-900 ' + (color === '#0f172a' ? 'ring-2 ring-offset-1 ring-slate-900' : '');
+        }
+
+        function clearSignaturePad() {
+            sigPadCtx.clearRect(0, 0, sigPadCanvas.width, sigPadCanvas.height);
+            sigHasStrokes = false;
+        }
+
+        function saveCurrentSignature() {
+            if (!sigHasStrokes) {
+                showToast('Dibuja primero la firma en el recuadro');
+                return;
+            }
+            const nameInput = document.getElementById('input-sig-name');
+            const sigName = nameInput.value.trim() || `Firma ${savedSignatures.length + 1}`;
+            const dataUrl = sigPadCanvas.toDataURL('image/png');
+
+            const newSig = {
+                id: 'sig_' + Date.now(),
+                name: sigName,
+                dataUrl
+            };
+
+            savedSignatures.unshift(newSig);
+            saveSignaturesToStorage();
+            clearSignaturePad();
+            nameInput.value = '';
+
+            // Immediately place it on the PDF and close modal
+            placeSignatureOnPdf(newSig.dataUrl);
+            closeModal('modal-signatures');
+            showToast(`"${sigName}" guardada y colocada en el PDF`);
+        }
+
+        // Convert uploaded photo of a signature on white paper to transparent PNG
+        function handleSignatureImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                    const tempCanvas = document.createElement('canvas');
+                    const maxW = 400;
+                    const scale = Math.min(1, maxW / img.width);
+                    tempCanvas.width = img.width * scale;
+                    tempCanvas.height = img.height * scale;
+
+                    const ctx = tempCanvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height);
+
+                    // Remove white/light background automatically
+                    const imgData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                    const data = imgData.data;
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i], g = data[i + 1], b = data[i + 2];
+                        const brightness = (r + g + b) / 3;
+                        if (brightness > 200) {
+                            data[i + 3] = 0; // Transparent
+                        }
+                    }
+                    ctx.putImageData(imgData, 0, 0);
+
+                    const transparentDataUrl = tempCanvas.toDataURL('image/png');
+                    const sigName = document.getElementById('input-sig-name').value.trim() || 'Firma escaneada';
+
+                    const newSig = {
+                        id: 'sig_' + Date.now(),
+                        name: sigName,
+                        dataUrl: transparentDataUrl
+                    };
+                    savedSignatures.unshift(newSig);
+                    saveSignaturesToStorage();
+                    placeSignatureOnPdf(transparentDataUrl);
+                    closeModal('modal-signatures');
+                    showToast('Foto de firma convertida a transparente y guardada');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function renderSignaturesUI() {
+            const container = document.getElementById('saved-signatures-list');
+            const badge = document.getElementById('sig-count-badge');
+            badge.textContent = savedSignatures.length;
+            container.innerHTML = '';
+
+            savedSignatures.forEach(sig => {
+                const card = document.createElement('div');
+                card.className = 'bg-slate-50 hover:bg-emerald-50/50 border border-slate-200 rounded-xl p-2.5 flex flex-col justify-between transition group';
+                card.innerHTML = `
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-xs font-bold text-slate-700 truncate">${escapeHtml(sig.name)}</span>
+                        <button onclick="deleteSignature('${sig.id}')" class="text-slate-400 hover:text-rose-600 px-1.5 py-0.5 rounded text-xs" title="Eliminar firma">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                    <div onclick="useSavedSignature('${sig.id}')" class="bg-white border border-slate-200 rounded-lg h-16 flex items-center justify-center p-1 cursor-pointer">
+                        <img src="${sig.dataUrl}" class="max-h-full max-w-full object-contain" alt="${escapeHtml(sig.name)}">
+                    </div>
+                    <button onclick="useSavedSignature('${sig.id}')" class="mt-2 w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold">
+                        Estampar firma
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function useSavedSignature(id) {
+            const sig = savedSignatures.find(s => s.id === id);
+            if (!sig) return;
+            placeSignatureOnPdf(sig.dataUrl);
+            closeModal('modal-signatures');
+            showToast(`"${sig.name}" colocada. Arrástrala al hueco de firma`);
+        }
+
+        function placeSignatureOnPdf(dataUrl) {
+            const newId = 'sig_el_' + Date.now();
+            placedElements.push({
+                id: newId,
+                page: currentPage,
+                type: 'signature',
+                xRatio: lastTapPosition.xRatio,
+                yRatio: lastTapPosition.yRatio,
+                widthRatio: 0.25,
+                heightRatio: 0.085,
+                imageData: dataUrl
+            });
+            selectElement(newId);
+        }
+
+        function deleteSignature(id) {
+            savedSignatures = savedSignatures.filter(s => s.id !== id);
+            saveSignaturesToStorage();
+            showToast('Firma eliminada');
+        }
+
+        // ============================================================================
+        // NEW FEATURE: GESTOR DE ANEXOS, DNI (ANVERSO + REVERSO), PHOTOS & PDFs
+        // ============================================================================
+        function switchAnnexTab(tabId) {
+            ['tab-dni', 'tab-files', 'tab-saved-docs'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(tabId).classList.remove('hidden');
+
+            const activeClass = 'px-3 py-2 rounded-t-xl text-xs font-bold bg-white text-indigo-700 border-t border-x border-slate-200 flex items-center gap-1.5 shrink-0';
+            const inactiveClass = 'px-3 py-2 rounded-t-xl text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 shrink-0';
+
+            document.getElementById('btn-tab-dni').className = tabId === 'tab-dni' ? activeClass : inactiveClass;
+            document.getElementById('btn-tab-files').className = tabId === 'tab-files' ? activeClass : inactiveClass;
+            document.getElementById('btn-tab-saved-docs').className = tabId === 'tab-saved-docs' ? activeClass : inactiveClass;
+        }
+
+        // Compress & normalize any uploaded photo so mobile camera 12MP shots remain fast and crisp
+        function compressAndNormalizeImage(fileOrDataUrl, maxDim = 1100, quality = 0.82) {
+            return new Promise((resolve, reject) => {
+                const processImg = (src) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let w = img.width;
+                        let h = img.height;
+                        if (w > maxDim || h > maxDim) {
+                            if (w > h) {
+                                h = Math.round((h * maxDim) / w);
+                                w = maxDim;
+                            } else {
+                                w = Math.round((w * maxDim) / h);
+                                h = maxDim;
+                            }
+                        }
+                        const c = document.createElement('canvas');
+                        c.width = w;
+                        c.height = h;
+                        const ctx = c.getContext('2d');
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, w, h);
+                        ctx.drawImage(img, 0, 0, w, h);
+                        resolve(c.toDataURL('image/jpeg', quality));
+                    };
+                    img.onerror = reject;
+                    img.src = src;
+                };
+
+                if (typeof fileOrDataUrl === 'string') {
+                    processImg(fileOrDataUrl);
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = (e) => processImg(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(fileOrDataUrl);
+                }
+            });
+        }
+
+        function rotateDataUrl90(dataUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const c = document.createElement('canvas');
+                    c.width = img.height;
+                    c.height = img.width;
+                    const ctx = c.getContext('2d');
+                    ctx.translate(c.width / 2, c.height / 2);
+                    ctx.rotate(Math.PI / 2);
+                    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+                    resolve(c.toDataURL('image/jpeg', 0.88));
+                };
+                img.src = dataUrl;
+            });
+        }
+
+        async function handleDniSideUpload(event, side) {
+            const file = event.target.files[0];
+            if (!file) return;
+            try {
+                const compressed = await compressAndNormalizeImage(file, 1000, 0.84);
+                if (side === 'front') {
+                    dniDraft.frontDataUrl = compressed;
+                } else {
+                    dniDraft.backDataUrl = compressed;
+                }
+                updateDniDraftPreviewUI();
+                showToast(side === 'front' ? 'Anverso del DNI cargado' : 'Reverso del DNI cargado');
+            } catch (e) {
+                console.error(e);
+                showToast('Error al procesar la imagen del DNI');
+            }
+            event.target.value = '';
+        }
+
+        function updateDniDraftPreviewUI() {
+            const frontWrap = document.getElementById('dni-front-preview-wrap');
+            const frontLabel = document.getElementById('dni-front-label');
+            const frontImg = document.getElementById('dni-front-preview');
+
+            if (dniDraft.frontDataUrl) {
+                frontImg.src = dniDraft.frontDataUrl;
+                frontWrap.classList.remove('hidden');
+                frontLabel.classList.add('hidden');
+            } else {
+                frontWrap.classList.add('hidden');
+                frontLabel.classList.remove('hidden');
+            }
+
+            const backWrap = document.getElementById('dni-back-preview-wrap');
+            const backLabel = document.getElementById('dni-back-label');
+            const backImg = document.getElementById('dni-back-preview');
+
+            if (dniDraft.backDataUrl) {
+                backImg.src = dniDraft.backDataUrl;
+                backWrap.classList.remove('hidden');
+                backLabel.classList.add('hidden');
+            } else {
+                backWrap.classList.add('hidden');
+                backLabel.classList.remove('hidden');
+            }
+        }
+
+        async function rotateDniSide(side) {
+            if (side === 'front' && dniDraft.frontDataUrl) {
+                dniDraft.frontDataUrl = await rotateDataUrl90(dniDraft.frontDataUrl);
+            } else if (side === 'back' && dniDraft.backDataUrl) {
+                dniDraft.backDataUrl = await rotateDataUrl90(dniDraft.backDataUrl);
+            }
+            updateDniDraftPreviewUI();
+        }
+
+        function clearDniSide(side) {
+            if (side === 'front') dniDraft.frontDataUrl = null;
+            if (side === 'back') dniDraft.backDataUrl = null;
+            updateDniDraftPreviewUI();
+        }
+
+        // Generate realistic sample Spanish DNI Front & Back images for instant testing
+        function generateDemoDniImages(fullName, dniNum, address) {
+            const makeCard = (isFront) => {
+                const c = document.createElement('canvas');
+                c.width = 520;
+                c.height = 330;
+                const ctx = c.getContext('2d');
+
+                // Card background gradient
+                const grad = ctx.createLinearGradient(0, 0, 520, 330);
+                grad.addColorStop(0, '#eff6ff');
+                grad.addColorStop(1, '#dbeafe');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 520, 330);
+
+                // Card border
+                ctx.strokeStyle = '#93c5fd';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(4, 4, 512, 322);
+
+                // Top header band
+                ctx.fillStyle = '#1e3a8a';
+                ctx.fillRect(4, 4, 512, 46);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 16px Arial, sans-serif';
+                ctx.fillText(isFront ? 'ESPAÑA - DOCUMENTO NACIONAL DE IDENTIDAD (ANVERSO)' : 'ESPAÑA - DOCUMENTO NACIONAL DE IDENTIDAD (REVERSO)', 18, 33);
+
+                if (isFront) {
+                    // Photo placeholder box
+                    ctx.fillStyle = '#cbd5e1';
+                    ctx.fillRect(24, 72, 115, 145);
+                    ctx.strokeStyle = '#64748b';
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeRect(24, 72, 115, 145);
+
+                    // Silhouette icon
+                    ctx.fillStyle = '#475569';
+                    ctx.beginPath();
+                    ctx.arc(81, 120, 24, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(81, 195, 42, Math.PI, 0);
+                    ctx.fill();
+
+                    // Personal Details
+                    ctx.fillStyle = '#475569';
+                    ctx.font = 'bold 11px Arial, sans-serif';
+                    ctx.fillText('APELLIDOS Y NOMBRE / TITULAR:', 160, 88);
+                    ctx.fillStyle = '#0f172a';
+                    ctx.font = 'bold 17px Arial, sans-serif';
+                    ctx.fillText(fullName, 160, 112);
+
+                    ctx.fillStyle = '#475569';
+                    ctx.font = 'bold 11px Arial, sans-serif';
+                    ctx.fillText('NÚMERO DNI:', 160, 148);
+                    ctx.fillStyle = '#1d4ed8';
+                    ctx.font = 'bold 20px monospace';
+                    ctx.fillText(dniNum, 160, 173);
+
+                    ctx.fillStyle = '#475569';
+                    ctx.font = 'bold 11px Arial, sans-serif';
+                    ctx.fillText('FECHA NACIMIENTO: 15 / 05 / 1982     VALIDEZ: 2032', 160, 210);
+                } else {
+                    ctx.fillStyle = '#475569';
+                    ctx.font = 'bold 12px Arial, sans-serif';
+                    ctx.fillText('DOMICILIO / DIRECCIÓN COMPLETA:', 26, 85);
+                    ctx.fillStyle = '#0f172a';
+                    ctx.font = 'bold 16px Arial, sans-serif';
+                    ctx.fillText(address, 26, 112);
+
+                    ctx.fillStyle = '#475569';
+                    ctx.font = 'bold 12px Arial, sans-serif';
+                    ctx.fillText('LUGAR DE NACIMIENTO / PROVINCIA: MADRID (MADRID)', 26, 152);
+                    ctx.fillText('HIJO/A DE: MANUEL Y CARMEN', 26, 178);
+
+                    // MRZ OCR lines at bottom
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillRect(16, 215, 488, 92);
+                    ctx.fillStyle = '#334155';
+                    ctx.font = 'bold 16px monospace';
+                    ctx.fillText('IDESP' + dniNum + '<<<<<<<<<<<<<<<', 28, 244);
+                    ctx.fillText('8205154M3205157ESP<<<<<<<<<<<8', 28, 268);
+                    ctx.fillText('VAZQUEZ<MUNOZ<<LUCAS<<<<<<<<<<', 28, 292);
+                }
+                return c.toDataURL('image/jpeg', 0.85);
+            };
+
+            return {
+                front: makeCard(true),
+                back: makeCard(false)
+            };
+        }
+
+        function loadDemoDNIPair() {
+            const pair = generateDemoDniImages('LUCAS VÁZQUEZ MUÑOZ', '12345678Z', 'CALLE TOLEDO 24, 1ª ESC, 2º DERECHA');
+            dniDraft.frontDataUrl = pair.front;
+            dniDraft.backDataUrl = pair.back;
+            document.getElementById('dni-title-input').value = 'Fotocopia DNI - Lucas Vázquez Muñoz';
+            updateDniDraftPreviewUI();
+            showToast('DNI de ejemplo cargado (Anverso y Reverso)');
+        }
+
+        function addDniAsAnnexPage() {
+            if (!dniDraft.frontDataUrl && !dniDraft.backDataUrl) {
+                showToast('Sube al menos una cara del DNI o pulsa "Cargar DNI de Prueba"');
+                return;
+            }
+            const title = document.getElementById('dni-title-input').value.trim() || 'Fotocopia DNI (Anverso y Reverso)';
+
+            // Save to localStorage if checked
+            if (document.getElementById('check-save-dni-memory').checked) {
+                const exists = savedDniDocs.some(d => d.title.toLowerCase() === title.toLowerCase());
+                if (!exists) {
+                    savedDniDocs.unshift({
+                        id: 'saved_dni_' + Date.now(),
+                        title,
+                        frontDataUrl: dniDraft.frontDataUrl,
+                        backDataUrl: dniDraft.backDataUrl
+                    });
+                    saveDnisToStorage();
+                }
+            }
+
+            attachmentsQueue.push({
+                id: 'annex_dni_' + Date.now(),
+                type: 'dni_pair',
+                title,
+                frontDataUrl: dniDraft.frontDataUrl,
+                backDataUrl: dniDraft.backDataUrl,
+                pageCount: 1
+            });
+
+            // Reset draft
+            dniDraft.frontDataUrl = null;
+            dniDraft.backDataUrl = null;
+            document.getElementById('dni-title-input').value = '';
+            updateDniDraftPreviewUI();
+            updateAttachmentsBadgesAndSummary();
+            showToast('Hoja con DNI añadida al final del PDF');
+        }
+
+        function stampDniOnCurrentPage() {
+            const imgToStamp = dniDraft.frontDataUrl || dniDraft.backDataUrl;
+            if (!imgToStamp) {
+                showToast('Primero selecciona la foto del DNI o pulsa "Cargar DNI de Prueba"');
+                return;
+            }
+            const newId = 'img_el_' + Date.now();
+            placedElements.push({
+                id: newId,
+                page: currentPage,
+                type: 'image',
+                xRatio: lastTapPosition.xRatio,
+                yRatio: lastTapPosition.yRatio,
+                widthRatio: 0.38,
+                heightRatio: 0.18,
+                imageData: imgToStamp
+            });
+            selectElement(newId);
+            closeModal('modal-attachments');
+            showToast('Imagen pegada en la hoja actual. Puedes moverla o cambiar su tamaño');
+        }
+
+        function renderSavedDnisUI() {
+            const list = document.getElementById('saved-dnis-list');
+            const countEl = document.getElementById('saved-dnis-count');
+            countEl.textContent = savedDniDocs.length;
+            list.innerHTML = '';
+
+            if (savedDniDocs.length === 0) {
+                list.innerHTML = `<div class="col-span-2 text-center py-6 text-xs text-slate-400">No tienes DNIs guardados aún.</div>`;
+                return;
+            }
+
+            savedDniDocs.forEach(doc => {
+                const card = document.createElement('div');
+                card.className = 'bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col justify-between gap-2';
+                card.innerHTML = `
+                    <div class="flex items-center justify-between gap-1">
+                        <span class="text-xs font-bold text-slate-800 truncate"><i class="fa-solid fa-id-card text-indigo-600 mr-1"></i>${escapeHtml(doc.title)}</span>
+                        <button onclick="deleteSavedDniDoc('${doc.id}')" class="text-slate-400 hover:text-rose-600 text-xs px-1">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-1.5 bg-white p-1.5 rounded-lg border border-slate-200">
+                        ${doc.frontDataUrl ? `<img src="${doc.frontDataUrl}" class="h-14 w-full object-contain rounded">` : `<div class="h-14 flex items-center justify-center text-[10px] text-slate-400">Sin anverso</div>`}
+                        ${doc.backDataUrl ? `<img src="${doc.backDataUrl}" class="h-14 w-full object-contain rounded">` : `<div class="h-14 flex items-center justify-center text-[10px] text-slate-400">Sin reverso</div>`}
+                    </div>
+                    <button onclick="attachSavedDniToQueue('${doc.id}')" class="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-plus"></i> Adjuntar al PDF (1 pág.)
+                    </button>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function attachSavedDniToQueue(id) {
+            const doc = savedDniDocs.find(d => d.id === id);
+            if (!doc) return;
+            attachmentsQueue.push({
+                id: 'annex_dni_' + Date.now(),
+                type: 'dni_pair',
+                title: doc.title,
+                frontDataUrl: doc.frontDataUrl,
+                backDataUrl: doc.backDataUrl,
+                pageCount: 1
+            });
+            updateAttachmentsBadgesAndSummary();
+            showToast(`"${doc.title}" añadido a la cola de anexos`);
+        }
+
+        function deleteSavedDniDoc(id) {
+            savedDniDocs = savedDniDocs.filter(d => d.id !== id);
+            saveDnisToStorage();
+            showToast('DNI eliminado de la memoria');
+        }
+
+        // Attach loose images (Libro de familia, receipts, etc.)
+        async function handleAttachImages(event) {
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+
+            for (const file of files) {
+                try {
+                    const dataUrl = await compressAndNormalizeImage(file, 1200, 0.84);
+                    attachmentsQueue.push({
+                        id: 'annex_img_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                        type: 'image_page',
+                        title: file.name.replace(/\.[^/.]+$/, ''),
+                        imageDataUrl: dataUrl,
+                        pageCount: 1
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+            event.target.value = '';
+            updateAttachmentsBadgesAndSummary();
+            showToast(`${files.length} imagen(es) añadida(s) como anexo`);
+        }
+
+        // Attach external PDFs (Partida de bautismo, etc.)
+        async function handleAttachExternalPDFs(event) {
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+
+            const { PDFDocument } = PDFLib;
+            for (const file of files) {
+                try {
+                    const ab = await file.arrayBuffer();
+                    const uint8 = new Uint8Array(ab);
+                    const extDoc = await PDFDocument.load(uint8);
+                    const numPages = extDoc.getPageCount();
+
+                    attachmentsQueue.push({
+                        id: 'annex_pdf_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                        type: 'external_pdf',
+                        title: file.name,
+                        pdfBytes: uint8,
+                        pageCount: numPages
+                    });
+                } catch (e) {
+                    console.error('Error loading external PDF:', e);
+                    showToast('No se pudo leer el PDF adjunto: ' + file.name);
+                }
+            }
+            event.target.value = '';
+            updateAttachmentsBadgesAndSummary();
+            showToast('Archivo PDF añadido a los anexos');
+        }
+
+        // NEW: Attach external Word (.docx / .doc) files into the Attachments Queue (auto-converted to A4 PDF pages)
+        async function handleAttachExternalWordDocs(event) {
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+
+            const { PDFDocument } = PDFLib;
+            for (const file of files) {
+                try {
+                    showToast('Convirtiendo anexo Word "' + file.name + '" a PDF...');
+                    const html = await extractHtmlFromWordFile(file);
+                    const convertedBytes = await convertWordHtmlToPdfBytes(html);
+                    const extDoc = await PDFDocument.load(convertedBytes);
+                    const numPages = extDoc.getPageCount();
+
+                    attachmentsQueue.push({
+                        id: 'annex_word_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                        type: 'external_pdf',
+                        isFromWord: true,
+                        title: file.name + ' (Word convertido a PDF)',
+                        pdfBytes: convertedBytes,
+                        pageCount: numPages
+                    });
+                } catch (e) {
+                    console.error('Error converting attached Word file:', e);
+                    showToast('No se pudo convertir el Word adjunto: ' + file.name);
+                }
+            }
+            event.target.value = '';
+            updateAttachmentsBadgesAndSummary();
+            showToast('Documento(s) Word añadido(s) como páginas PDF anexas');
+        }
+
+        function moveAttachmentInQueue(index, delta) {
+            const target = index + delta;
+            if (target < 0 || target >= attachmentsQueue.length) return;
+            const temp = attachmentsQueue[index];
+            attachmentsQueue[index] = attachmentsQueue[target];
+            attachmentsQueue[target] = temp;
+            if (isCreatedFromImages) {
+                rebuildPdfFromAttachmentsQueue();
+            } else {
+                updateAttachmentsBadgesAndSummary();
+            }
+        }
+
+        async function rotateQueuedImage(id) {
+            const item = attachmentsQueue.find(a => a.id === id);
+            if (!item || item.type !== 'image_page') return;
+            item.imageDataUrl = await rotateDataUrl90(item.imageDataUrl);
+            if (isCreatedFromImages) {
+                await rebuildPdfFromAttachmentsQueue();
+            } else {
+                updateAttachmentsBadgesAndSummary();
+            }
+        }
+
+        function removeAttachmentFromQueue(id) {
+            attachmentsQueue = attachmentsQueue.filter(a => a.id !== id);
+            if (isCreatedFromImages) {
+                rebuildPdfFromAttachmentsQueue();
+            } else {
+                updateAttachmentsBadgesAndSummary();
+            }
+            showToast('Anexo quitado de la lista');
+        }
+
+        function clearAllAttachments() {
+            attachmentsQueue = [];
+            if (isCreatedFromImages) {
+                isCreatedFromImages = false;
+                loadSampleConfirmationPDF(true);
+            } else {
+                updateAttachmentsBadgesAndSummary();
+            }
+            showToast('Se han vaciado los anexos');
+        }
+
+        function updateAttachmentsBadgesAndSummary() {
+            const totalExtraPages = attachmentsQueue.reduce((acc, item) => acc + (item.pageCount || 1), 0);
+            const countItems = attachmentsQueue.length;
+
+            document.getElementById('annex-count-badge').textContent = countItems;
+            document.getElementById('top-annex-badge').textContent = countItems;
+            document.getElementById('queue-count-label').textContent = countItems;
+
+            const extraPill = document.getElementById('extra-pages-pill');
+            const extraText = document.getElementById('extra-pages-text');
+            const bannerSub = document.getElementById('workspace-annex-sub');
+            const clearBtn = document.getElementById('btn-clear-annexes');
+
+            if (totalExtraPages > 0) {
+                extraPill.classList.remove('hidden');
+                extraText.textContent = `+${totalExtraPages} pág. anexa${totalExtraPages > 1 ? 's' : ''}`;
+                bannerSub.innerHTML = `<span class="text-amber-300 font-semibold">Tienes ${countItems} anexo(s) listo(s) (+${totalExtraPages} pág.)</span> que se unirán automáticamente al final del PDF.`;
+                clearBtn.classList.remove('hidden');
+            } else {
+                extraPill.classList.add('hidden');
+                bannerSub.textContent = 'Toca aquí para añadir el DNI (ambas caras), fotos u otros PDFs al final del documento.';
+                clearBtn.classList.add('hidden');
+            }
+
+            const combinedPages = totalPages + (isCreatedFromImages ? 0 : totalExtraPages);
+            document.getElementById('modal-total-pages-summary').textContent =
+                isCreatedFromImages 
+                    ? `Documento creado de imágenes: ${attachmentsQueue.length} página(s)`
+                    : `Formulario (${totalPages} pág.) + Anexos (${totalExtraPages} pág.) = ${combinedPages} pág. en total`;
+
+            // Render Queue List
+            const qList = document.getElementById('attachments-queue-list');
+            qList.innerHTML = '';
+
+            if (attachmentsQueue.length === 0) {
+                qList.innerHTML = `
+                    <div class="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 text-center text-xs text-slate-500">
+                        Todavía no has añadido anexos ni fotos. Usa las pestañas de arriba para adjuntar DNI, fotos o PDFs.
+                    </div>
+                `;
+                return;
+            }
+
+            // Drag reorder hint
+            const hint = document.createElement('div');
+            hint.className = 'text-[11px] text-slate-600 bg-indigo-50/80 border border-indigo-200/80 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 mb-2';
+            hint.innerHTML = '<i class="fa-solid fa-arrows-up-down-left-right text-indigo-500"></i><span><strong>Arrastra y suelta</strong> las fotos para colocarlas en el orden que quieras o usa las flechas.</span>';
+            qList.appendChild(hint);
+
+            attachmentsQueue.forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.className = 'bg-slate-50 border border-slate-200 hover:border-indigo-400 rounded-xl p-2.5 flex items-center justify-between gap-2 cursor-grab active:cursor-grabbing transition-all select-none';
+                row.draggable = true;
+                row.dataset.index = idx;
+
+                // Drag and Drop reordering handlers
+                row.addEventListener('dragstart', (e) => {
+                    draggedQueueIndex = idx;
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', String(idx));
+                    setTimeout(() => {
+                        row.classList.add('opacity-40', 'border-indigo-500', 'bg-indigo-50/50');
+                    }, 0);
+                });
+
+                row.addEventListener('dragend', () => {
+                    row.classList.remove('opacity-40', 'border-indigo-500', 'bg-indigo-50/50');
+                    document.querySelectorAll('.border-t-2, .border-b-2').forEach(el => {
+                        el.classList.remove('border-t-2', 'border-b-2', 'border-indigo-600');
+                    });
+                });
+
+                row.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const rect = row.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    if (e.clientY < midY) {
+                        row.classList.add('border-t-2', 'border-indigo-600');
+                        row.classList.remove('border-b-2');
+                    } else {
+                        row.classList.add('border-b-2', 'border-indigo-600');
+                        row.classList.remove('border-t-2');
+                    }
+                });
+
+                row.addEventListener('dragleave', () => {
+                    row.classList.remove('border-t-2', 'border-b-2', 'border-indigo-600');
+                });
+
+                row.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    row.classList.remove('border-t-2', 'border-b-2', 'border-indigo-600');
+                    const fromIdx = draggedQueueIndex !== null ? draggedQueueIndex : parseInt(e.dataTransfer.getData('text/plain'), 10);
+                    if (isNaN(fromIdx) || fromIdx === idx || fromIdx < 0 || fromIdx >= attachmentsQueue.length) return;
+
+                    const itemToMove = attachmentsQueue.splice(fromIdx, 1)[0];
+                    attachmentsQueue.splice(idx, 0, itemToMove);
+
+                    if (isCreatedFromImages) {
+                        rebuildPdfFromAttachmentsQueue();
+                    } else {
+                        updateAttachmentsBadgesAndSummary();
+                    }
+                    showToast(`Página colocada en la posición ${idx + 1}`);
+                });
+
+                let thumbHtml = '';
+                let badgeType = '';
+                if (item.type === 'dni_pair') {
+                    badgeType = '<span class="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded">Hoja DNI (2 Caras)</span>';
+                    thumbHtml = `
+                        <div class="flex gap-1 shrink-0">
+                            ${item.frontDataUrl ? `<img src="${item.frontDataUrl}" class="w-12 h-8 object-cover rounded border border-slate-300">` : ''}
+                            ${item.backDataUrl ? `<img src="${item.backDataUrl}" class="w-12 h-8 object-cover rounded border border-slate-300">` : ''}
+                        </div>
+                    `;
+                } else if (item.type === 'image_page') {
+                    badgeType = '<span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded">Imagen / Foto</span>';
+                    thumbHtml = `<img src="${item.imageDataUrl}" class="w-12 h-10 object-cover rounded border border-slate-300 shrink-0">`;
+                } else if (item.type === 'external_pdf') {
+                    if (item.isFromWord) {
+                        badgeType = `<span class="bg-sky-100 text-sky-800 text-[10px] font-bold px-2 py-0.5 rounded">Word → PDF (${item.pageCount} pág.)</span>`;
+                        thumbHtml = `<div class="w-10 h-10 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0"><i class="fa-solid fa-file-word"></i></div>`;
+                    } else {
+                        badgeType = `<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">PDF (${item.pageCount} pág.)</span>`;
+                        thumbHtml = `<div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0"><i class="fa-solid fa-file-pdf"></i></div>`;
+                    }
+                }
+
+                row.innerHTML = `
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <div class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-indigo-600 px-1 py-2 flex items-center shrink-0" title="Arrastra para cambiar el orden">
+                            <i class="fa-solid fa-grip-vertical text-base"></i>
+                        </div>
+                        <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0">${idx + 1}</span>
+                        ${thumbHtml}
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5 mb-0.5">${badgeType}</div>
+                            <p class="text-xs font-semibold text-slate-800 truncate">${escapeHtml(item.title)}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                        ${item.type === 'image_page' ? `
+                            <button onclick="rotateQueuedImage('${item.id}')" class="w-7 h-7 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs" title="Girar 90°">
+                                <i class="fa-solid fa-rotate-right"></i>
+                            </button>
+                        ` : ''}
+                        <button onclick="moveAttachmentInQueue(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} class="w-7 h-7 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-30 text-slate-600 text-xs" title="Subir orden">
+                            <i class="fa-solid fa-arrow-up"></i>
+                        </button>
+                        <button onclick="moveAttachmentInQueue(${idx}, 1)" ${idx === attachmentsQueue.length - 1 ? 'disabled' : ''} class="w-7 h-7 rounded bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-30 text-slate-600 text-xs" title="Bajar orden">
+                            <i class="fa-solid fa-arrow-down"></i>
+                        </button>
+                        <button onclick="removeAttachmentFromQueue('${item.id}')" class="w-7 h-7 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs" title="Quitar">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+                qList.appendChild(row);
+            });
+        }
+
+        // Helper to embed either PNG or JPEG DataURL into pdf-lib document seamlessly
+        async function embedDataUrlImage(pdfDoc, dataUrl) {
+            if (dataUrl.startsWith('data:image/png')) {
+                return await pdfDoc.embedPng(dataUrl);
+            } else {
+                return await pdfDoc.embedJpg(dataUrl);
+            }
+        }
+
+        // ============================================================================
+        // EXPORT FINAL UNIFIED PDF (FORM + TEXTS + SIGNATURES + DNI + EXTRA PDFs)
+        // ============================================================================
+        async function exportFinalPDF() {
+            if (!currentPdfBytes && attachmentsQueue.length === 0) {
+                showToast('Primero abre un PDF, Word o añade fotos');
+                return;
+            }
+            try {
+                showToast('Uniendo formulario y anexos en un solo PDF...');
+                const { PDFDocument, StandardFonts, rgb } = PDFLib;
+
+                let pdfDoc;
+                if (currentPdfBytes) {
+                    pdfDoc = await PDFDocument.load(currentPdfBytes);
+                } else {
+                    pdfDoc = await PDFDocument.create();
+                }
+
+                const fontHelvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+                const pages = pdfDoc.getPages();
+
+                // 1. Stamp all texts, signatures, and direct images onto the main form pages
+                for (const item of placedElements) {
+                    const pageIndex = item.page - 1;
+                    if (pageIndex < 0 || pageIndex >= pages.length) continue;
+
+                    const page = pages[pageIndex];
+                    const { width, height } = page.getSize();
+
+                    if (item.type === 'text') {
+                        const pdfX = (item.xRatio * width) + 3;
+                        const pdfY = height - (item.yRatio * height) - (item.fontSize * 0.78);
+
+                        const hex = item.color || '#0f172a';
+                        const r = parseInt(hex.slice(1, 3), 16) / 255;
+                        const g = parseInt(hex.slice(3, 5), 16) / 255;
+                        const b = parseInt(hex.slice(5, 7), 16) / 255;
+
+                        page.drawText(item.text, {
+                            x: pdfX,
+                            y: pdfY,
+                            size: item.fontSize,
+                            font: fontHelvetica,
+                            color: rgb(r, g, b)
+                        });
+                    } else if ((item.type === 'signature' || item.type === 'image') && item.imageData) {
+                        const embeddedImg = await embedDataUrlImage(pdfDoc, item.imageData);
+                        const sigW = item.widthRatio * width;
+                        const sigH = item.heightRatio * height;
+                        const pdfX = item.xRatio * width;
+                        const pdfY = height - (item.yRatio * height) - sigH;
+
+                        page.drawImage(embeddedImg, {
+                            x: pdfX,
+                            y: pdfY,
+                            width: sigW,
+                            height: sigH
+                        });
+                    }
+                }
+
+                // 2. Append all queued Attachments (only if not already the base document)
+                if (!isCreatedFromImages) {
+                    for (const annex of attachmentsQueue) {
+                        if (annex.type === 'dni_pair') {
+                            const page = pdfDoc.addPage([595.28, 841.89]); // Standard A4
+                            const { width, height } = page.getSize();
+
+                            // Header label
+                            page.drawText(annex.title || 'DOCUMENTO NACIONAL DE IDENTIDAD (ANEXO)', {
+                                x: 50,
+                                y: height - 55,
+                                size: 13,
+                                font: fontBold,
+                                color: rgb(0.12, 0.16, 0.25)
+                            });
+                            page.drawLine({
+                                start: { x: 50, y: height - 63 },
+                                end: { x: width - 50, y: height - 63 },
+                                thickness: 1,
+                                color: rgb(0.8, 0.84, 0.9)
+                            });
+
+                            // Realistic ID card box dimensions on A4 (approx 270pt x 172pt)
+                            const cardMaxW = 285;
+                            const cardMaxH = 185;
+
+                            if (annex.frontDataUrl) {
+                                page.drawText('ANVERSO (DELANTE):', {
+                                    x: (width - cardMaxW) / 2,
+                                    y: height - 105,
+                                    size: 9.5,
+                                    font: fontBold,
+                                    color: rgb(0.4, 0.45, 0.55)
+                                });
+                                const frontImg = await embedDataUrlImage(pdfDoc, annex.frontDataUrl);
+                                const dims = frontImg.scaleToFit(cardMaxW, cardMaxH);
+                                page.drawImage(frontImg, {
+                                    x: (width - dims.width) / 2,
+                                    y: height - 115 - dims.height,
+                                    width: dims.width,
+                                    height: dims.height
+                                });
+                            }
+
+                            if (annex.backDataUrl) {
+                                page.drawText('REVERSO (DETRÁS):', {
+                                    x: (width - cardMaxW) / 2,
+                                    y: height - 355,
+                                    size: 9.5,
+                                    font: fontBold,
+                                    color: rgb(0.4, 0.45, 0.55)
+                                });
+                                const backImg = await embedDataUrlImage(pdfDoc, annex.backDataUrl);
+                                const dims = backImg.scaleToFit(cardMaxW, cardMaxH);
+                                page.drawImage(backImg, {
+                                    x: (width - dims.width) / 2,
+                                    y: height - 365 - dims.height,
+                                    width: dims.width,
+                                    height: dims.height
+                                });
+                            }
+                        } else if (annex.type === 'image_page' && annex.imageDataUrl) {
+                            const page = pdfDoc.addPage([595.28, 841.89]);
+                            const { width, height } = page.getSize();
+
+                            if (annex.title) {
+                                page.drawText('ANEXO: ' + annex.title, {
+                                    x: 45,
+                                    y: height - 45,
+                                    size: 11,
+                                    font: fontBold,
+                                    color: rgb(0.2, 0.25, 0.35)
+                                });
+                            }
+
+                            const embedded = await embedDataUrlImage(pdfDoc, annex.imageDataUrl);
+                            const maxW = width - 80;
+                            const maxH = height - 110;
+                            const dims = embedded.scaleToFit(maxW, maxH);
+
+                            page.drawImage(embedded, {
+                                x: (width - dims.width) / 2,
+                                y: (height - 30 - dims.height) / 2,
+                                width: dims.width,
+                                height: dims.height
+                            });
+                        } else if (annex.type === 'external_pdf' && annex.pdfBytes) {
+                            const extPdf = await PDFDocument.load(annex.pdfBytes);
+                            const copiedPages = await pdfDoc.copyPages(extPdf, extPdf.getPageIndices());
+                            copiedPages.forEach((cp) => pdfDoc.addPage(cp));
+                        }
+                    }
+                }
+
+                const finalPdfBytes = await pdfDoc.save();
+                lastExportedBlob = new Blob([finalPdfBytes], { type: 'application/pdf' });
+                const finalPageCount = pdfDoc.getPageCount();
+                const extraPagesCount = isCreatedFromImages ? 0 : (finalPageCount - totalPages);
+
+                // Trigger automatic download right away
+                triggerLastExportDownload();
+
+                // Show clear summary modal with WhatsApp/Email share option
+                closeModal('modal-attachments');
+                document.getElementById('export-summary-breakdown').textContent = isCreatedFromImages
+                    ? `Documento final de ${finalPageCount} página(s) generado a partir de tus fotos.`
+                    : `Documento final de ${finalPageCount} página(s): Formulario (${totalPages} pág.) + Anexos (${extraPagesCount} pág.).`;
+                document.getElementById('export-summary-annex-line').innerHTML = isCreatedFromImages
+                    ? `<i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> ${attachmentsQueue.length} foto(s) ordenadas y maquetadas en PDF.`
+                    : `<i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> ${attachmentsQueue.length} anexo(s) unido(s) al final del mismo PDF.`;
+
+                openModal('modal-export-ready');
+            } catch (err) {
+                console.error('Error exporting PDF:', err);
+                showToast('Hubo un problema al generar el PDF completo');
+            }
+        }
+
+        function triggerLastExportDownload() {
+            if (!lastExportedBlob) return;
+            const url = URL.createObjectURL(lastExportedBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = lastExportedFileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+            showToast('¡PDF descargado en tu dispositivo!');
+        }
+
+        async function shareLastExportedPDF() {
+            if (!lastExportedBlob) return;
+            try {
+                const file = new File([lastExportedBlob], lastExportedFileName, { type: 'application/pdf' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        title: 'Formulario y Anexos en PDF',
+                        text: 'Adjunto el formulario rellenado y firmado con la documentación anexa.',
+                        files: [file]
+                    });
+                } else {
+                    triggerLastExportDownload();
+                    showToast('Tu navegador descargó el archivo para que puedas adjuntarlo manualmente');
+                }
+            } catch (e) {
+                console.log('Share cancelled or not supported:', e);
+            }
+        }
+
+        // ============================================================================
+        // MODAL & UTILITY HELPERS
+        // ============================================================================
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+    </script>
+</body>
+</html>
