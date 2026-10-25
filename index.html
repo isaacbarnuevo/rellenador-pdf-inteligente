@@ -582,8 +582,18 @@
 
                         <input type="text" id="dni-title-input" placeholder="Título en la hoja (ej: DNI - Lucas Vázquez Muñoz / Padre)" class="w-full px-3 py-2 rounded-xl border border-indigo-200 text-xs font-medium bg-white">
 
-                        <!-- Front & Back Upload Cards -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <!-- DNI Format Selector: 2 photos or 1 single combined photo -->
+                        <div class="flex items-center gap-1.5 p-1 bg-indigo-100/70 rounded-xl w-fit">
+                            <button type="button" onclick="setDniMode('two_sides')" id="btn-dni-mode-two" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-indigo-900 shadow-sm transition flex items-center gap-1">
+                                <i class="fa-solid fa-clone"></i> 2 fotos (Anverso + Reverso)
+                            </button>
+                            <button type="button" onclick="setDniMode('single_sheet')" id="btn-dni-mode-single" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 hover:text-indigo-900 transition flex items-center gap-1">
+                                <i class="fa-solid fa-file-image"></i> 1 sola foto (Ambas caras juntas)
+                            </button>
+                        </div>
+
+                        <!-- Front & Back Upload Cards (Mode 2 fotos) -->
+                        <div id="dni-two-sides-box" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <!-- Anverso -->
                             <div class="bg-white border-2 border-dashed border-indigo-300 rounded-xl p-3 flex flex-col items-center justify-center text-center relative min-h-[135px]">
                                 <div id="dni-front-preview-wrap" class="hidden w-full flex flex-col items-center">
@@ -629,6 +639,29 @@
                                     <input type="file" accept="image/*" class="hidden" onchange="handleDniSideUpload(event, 'back')">
                                 </label>
                             </div>
+                        </div>
+
+                        <!-- Single Sheet DNI Upload Card (Mode 1 foto) -->
+                        <div id="dni-single-sheet-box" class="hidden bg-white border-2 border-dashed border-indigo-300 rounded-xl p-3 flex flex-col items-center justify-center text-center relative min-h-[145px]">
+                            <div id="dni-single-preview-wrap" class="hidden w-full flex flex-col items-center">
+                                <img id="dni-single-preview" class="h-28 object-contain rounded-lg border border-slate-200 shadow-sm mb-2" alt="DNI Ambas Caras">
+                                <div class="flex gap-1.5">
+                                    <button onclick="rotateDniSide('single')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded text-[11px] font-medium">
+                                        <i class="fa-solid fa-rotate-right"></i> Girar 90°
+                                    </button>
+                                    <button onclick="clearDniSide('single')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded text-[11px] font-medium">
+                                        <i class="fa-solid fa-trash"></i> Quitar
+                                    </button>
+                                </div>
+                            </div>
+                            <label id="dni-single-label" class="cursor-pointer flex flex-col items-center justify-center w-full h-full py-3">
+                                <div class="w-11 h-11 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mb-1.5">
+                                    <i class="fa-solid fa-camera text-base"></i>
+                                </div>
+                                <span class="text-xs font-bold text-slate-800">Foto o escaneo del DNI con ambas caras</span>
+                                <span class="text-[10px] text-slate-500 mt-0.5">Toca para elegir la foto donde aparecen Anverso y Reverso juntos</span>
+                                <input type="file" accept="image/*" class="hidden" onchange="handleDniSideUpload(event, 'single')">
+                            </label>
                         </div>
 
                         <!-- Save DNI in phone memory checkbox -->
@@ -922,8 +955,10 @@
         // Temporary DNI Builder State (inside Modal 4)
         let dniDraft = {
             frontDataUrl: null,
-            backDataUrl: null
+            backDataUrl: null,
+            singleDataUrl: null
         };
+        let dniMode = 'two_sides'; // 'two_sides' | 'single_sheet'
 
         // Last exported PDF Blob & File for re-downloading or native mobile sharing
         let lastExportedBlob = null;
@@ -1425,6 +1460,84 @@
             }
         }
 
+        // Shared helper to render DNI on an A4 PDF page (supporting both 2 separate photos and 1 single combined photo)
+        async function renderDniPageOnPdfDoc(pdfDoc, item) {
+            const { StandardFonts, rgb } = PDFLib;
+            const a4W = 595.28;
+            const a4H = 841.89;
+            const page = pdfDoc.addPage([a4W, a4H]);
+            const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+            // Header label
+            page.drawText(item.title || 'DOCUMENTO NACIONAL DE IDENTIDAD (ANEXO)', {
+                x: 50,
+                y: a4H - 55,
+                size: 13,
+                font: fontBold,
+                color: rgb(0.12, 0.16, 0.25)
+            });
+            page.drawLine({
+                start: { x: 50, y: a4H - 63 },
+                end: { x: a4W - 50, y: a4H - 63 },
+                thickness: 1,
+                color: rgb(0.8, 0.84, 0.9)
+            });
+
+            if (item.isSingleSheet && item.singleDataUrl) {
+                // Single photo / scan containing both front and back
+                const singleImg = await embedDataUrlImage(pdfDoc, item.singleDataUrl);
+                const maxW = a4W - 70;
+                const maxH = a4H - 110;
+                const dims = singleImg.scaleToFit(maxW, maxH);
+                page.drawImage(singleImg, {
+                    x: (a4W - dims.width) / 2,
+                    y: (a4H - 50 - dims.height) / 2,
+                    width: dims.width,
+                    height: dims.height
+                });
+            } else {
+                // 2 separate photos (Anverso + Reverso)
+                const cardMaxW = 285;
+                const cardMaxH = 185;
+
+                if (item.frontDataUrl) {
+                    page.drawText('ANVERSO (DELANTE):', {
+                        x: (a4W - cardMaxW) / 2,
+                        y: a4H - 105,
+                        size: 9.5,
+                        font: fontBold,
+                        color: rgb(0.4, 0.45, 0.55)
+                    });
+                    const frontImg = await embedDataUrlImage(pdfDoc, item.frontDataUrl);
+                    const dims = frontImg.scaleToFit(cardMaxW, cardMaxH);
+                    page.drawImage(frontImg, {
+                        x: (a4W - dims.width) / 2,
+                        y: a4H - 115 - dims.height,
+                        width: dims.width,
+                        height: dims.height
+                    });
+                }
+
+                if (item.backDataUrl) {
+                    page.drawText('REVERSO (DETRÁS):', {
+                        x: (a4W - cardMaxW) / 2,
+                        y: a4H - 355,
+                        size: 9.5,
+                        font: fontBold,
+                        color: rgb(0.4, 0.45, 0.55)
+                    });
+                    const backImg = await embedDataUrlImage(pdfDoc, item.backDataUrl);
+                    const dims = backImg.scaleToFit(cardMaxW, cardMaxH);
+                    page.drawImage(backImg, {
+                        x: (a4W - dims.width) / 2,
+                        y: a4H - 365 - dims.height,
+                        width: dims.width,
+                        height: dims.height
+                    });
+                }
+            }
+        }
+
         async function rebuildPdfFromAttachmentsQueue() {
             if (!isCreatedFromImages || attachmentsQueue.length === 0) {
                 updateAttachmentsBadgesAndSummary();
@@ -1456,44 +1569,7 @@
                         const copiedPages = await pdfDoc.copyPages(extDoc, extDoc.getPageIndices());
                         copiedPages.forEach(cp => pdfDoc.addPage(cp));
                     } else if (item.type === 'dni_pair') {
-                        const page = pdfDoc.addPage([595.28, 841.89]);
-                        const { width, height } = page.getSize();
-                        const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-                        page.drawText(item.title || 'DOCUMENTO NACIONAL DE IDENTIDAD (ANEXO)', {
-                            x: 50,
-                            y: height - 55,
-                            size: 13,
-                            font: fontBold,
-                            color: rgb(0.12, 0.16, 0.25)
-                        });
-                        page.drawLine({
-                            start: { x: 50, y: height - 63 },
-                            end: { x: width - 50, y: height - 63 },
-                            thickness: 1,
-                            color: rgb(0.8, 0.84, 0.9)
-                        });
-                        const cardMaxW = 285;
-                        const cardMaxH = 185;
-                        if (item.frontDataUrl) {
-                            const frontImg = await embedDataUrlImage(pdfDoc, item.frontDataUrl);
-                            const dims = frontImg.scaleToFit(cardMaxW, cardMaxH);
-                            page.drawImage(frontImg, {
-                                x: (width - dims.width) / 2,
-                                y: height - 115 - dims.height,
-                                width: dims.width,
-                                height: dims.height
-                            });
-                        }
-                        if (item.backDataUrl) {
-                            const backImg = await embedDataUrlImage(pdfDoc, item.backDataUrl);
-                            const dims = backImg.scaleToFit(cardMaxW, cardMaxH);
-                            page.drawImage(backImg, {
-                                x: (width - dims.width) / 2,
-                                y: height - 365 - dims.height,
-                                width: dims.width,
-                                height: dims.height
-                            });
-                        }
+                        await renderDniPageOnPdfDoc(pdfDoc, item);
                     }
                 }
 
@@ -2495,18 +2571,43 @@
             });
         }
 
+        function setDniMode(mode) {
+            dniMode = mode;
+            const btnTwo = document.getElementById('btn-dni-mode-two');
+            const btnSingle = document.getElementById('btn-dni-mode-single');
+            const boxTwo = document.getElementById('dni-two-sides-box');
+            const boxSingle = document.getElementById('dni-single-sheet-box');
+
+            if (mode === 'two_sides') {
+                if (btnTwo) btnTwo.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-indigo-900 shadow-sm transition flex items-center gap-1';
+                if (btnSingle) btnSingle.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 hover:text-indigo-900 transition flex items-center gap-1';
+                if (boxTwo) boxTwo.classList.remove('hidden');
+                if (boxSingle) boxSingle.classList.add('hidden');
+            } else {
+                if (btnSingle) btnSingle.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-indigo-900 shadow-sm transition flex items-center gap-1';
+                if (btnTwo) btnTwo.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 hover:text-indigo-900 transition flex items-center gap-1';
+                if (boxSingle) boxSingle.classList.remove('hidden');
+                if (boxTwo) boxTwo.classList.add('hidden');
+            }
+            updateDniDraftPreviewUI();
+        }
+
         async function handleDniSideUpload(event, side) {
             const file = event.target.files[0];
             if (!file) return;
             try {
-                const compressed = await compressAndNormalizeImage(file, 1000, 0.84);
+                const compressed = await compressAndNormalizeImage(file, 1100, 0.85);
                 if (side === 'front') {
                     dniDraft.frontDataUrl = compressed;
-                } else {
+                    showToast('Anverso del DNI cargado');
+                } else if (side === 'back') {
                     dniDraft.backDataUrl = compressed;
+                    showToast('Reverso del DNI cargado');
+                } else if (side === 'single') {
+                    dniDraft.singleDataUrl = compressed;
+                    showToast('Foto con ambas caras del DNI cargada');
                 }
                 updateDniDraftPreviewUI();
-                showToast(side === 'front' ? 'Anverso del DNI cargado' : 'Reverso del DNI cargado');
             } catch (e) {
                 console.error(e);
                 showToast('Error al procesar la imagen del DNI');
@@ -2515,30 +2616,49 @@
         }
 
         function updateDniDraftPreviewUI() {
+            // Front preview
             const frontWrap = document.getElementById('dni-front-preview-wrap');
             const frontLabel = document.getElementById('dni-front-label');
             const frontImg = document.getElementById('dni-front-preview');
-
-            if (dniDraft.frontDataUrl) {
-                frontImg.src = dniDraft.frontDataUrl;
-                frontWrap.classList.remove('hidden');
-                frontLabel.classList.add('hidden');
-            } else {
-                frontWrap.classList.add('hidden');
-                frontLabel.classList.remove('hidden');
+            if (frontWrap && frontLabel && frontImg) {
+                if (dniDraft.frontDataUrl) {
+                    frontImg.src = dniDraft.frontDataUrl;
+                    frontWrap.classList.remove('hidden');
+                    frontLabel.classList.add('hidden');
+                } else {
+                    frontWrap.classList.add('hidden');
+                    frontLabel.classList.remove('hidden');
+                }
             }
 
+            // Back preview
             const backWrap = document.getElementById('dni-back-preview-wrap');
             const backLabel = document.getElementById('dni-back-label');
             const backImg = document.getElementById('dni-back-preview');
+            if (backWrap && backLabel && backImg) {
+                if (dniDraft.backDataUrl) {
+                    backImg.src = dniDraft.backDataUrl;
+                    backWrap.classList.remove('hidden');
+                    backLabel.classList.add('hidden');
+                } else {
+                    backWrap.classList.add('hidden');
+                    backLabel.classList.remove('hidden');
+                }
+            }
 
-            if (dniDraft.backDataUrl) {
-                backImg.src = dniDraft.backDataUrl;
-                backWrap.classList.remove('hidden');
-                backLabel.classList.add('hidden');
-            } else {
-                backWrap.classList.add('hidden');
-                backLabel.classList.remove('hidden');
+            // Single sheet preview (both sides in one photo)
+            const singleWrap = document.getElementById('dni-single-preview-wrap');
+            const singleLabel = document.getElementById('dni-single-label');
+            const singleImg = document.getElementById('dni-single-preview');
+            if (singleWrap && singleLabel && singleImg) {
+                if (dniDraft.singleDataUrl) {
+                    singleImg.src = dniDraft.singleDataUrl;
+                    singleWrap.classList.remove('hidden');
+                    singleLabel.classList.add('hidden');
+                } else {
+                    singleWrap.classList.add('hidden');
+                    singleLabel.classList.remove('hidden');
+                }
             }
         }
 
@@ -2547,6 +2667,8 @@
                 dniDraft.frontDataUrl = await rotateDataUrl90(dniDraft.frontDataUrl);
             } else if (side === 'back' && dniDraft.backDataUrl) {
                 dniDraft.backDataUrl = await rotateDataUrl90(dniDraft.backDataUrl);
+            } else if (side === 'single' && dniDraft.singleDataUrl) {
+                dniDraft.singleDataUrl = await rotateDataUrl90(dniDraft.singleDataUrl);
             }
             updateDniDraftPreviewUI();
         }
@@ -2554,6 +2676,7 @@
         function clearDniSide(side) {
             if (side === 'front') dniDraft.frontDataUrl = null;
             if (side === 'back') dniDraft.backDataUrl = null;
+            if (side === 'single') dniDraft.singleDataUrl = null;
             updateDniDraftPreviewUI();
         }
 
@@ -2650,21 +2773,48 @@
             };
         }
 
+        function generateDemoCombinedDniSheet(fullName, dniNum, address) {
+            const pair = generateDemoDniImages(fullName, dniNum, address);
+            const c = document.createElement('canvas');
+            c.width = 560;
+            c.height = 720;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 560, 720);
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(4, 4, 552, 712);
+
+            const imgF = new Image();
+            imgF.src = pair.front;
+            const imgB = new Image();
+            imgB.src = pair.back;
+
+            ctx.drawImage(imgF, 20, 20, 520, 330);
+            ctx.drawImage(imgB, 20, 370, 520, 330);
+            return c.toDataURL('image/jpeg', 0.88);
+        }
+
         function loadDemoDNIPair() {
             const pair = generateDemoDniImages('LUCAS VÁZQUEZ MUÑOZ', '12345678Z', 'CALLE TOLEDO 24, 1ª ESC, 2º DERECHA');
             dniDraft.frontDataUrl = pair.front;
             dniDraft.backDataUrl = pair.back;
+            dniDraft.singleDataUrl = generateDemoCombinedDniSheet('LUCAS VÁZQUEZ MUÑOZ', '12345678Z', 'CALLE TOLEDO 24, 1ª ESC, 2º DERECHA');
             document.getElementById('dni-title-input').value = 'Fotocopia DNI - Lucas Vázquez Muñoz';
             updateDniDraftPreviewUI();
-            showToast('DNI de ejemplo cargado (Anverso y Reverso)');
+            showToast('DNI de ejemplo cargado');
         }
 
         function addDniAsAnnexPage() {
-            if (!dniDraft.frontDataUrl && !dniDraft.backDataUrl) {
-                showToast('Sube al menos una cara del DNI o pulsa "Cargar DNI de Prueba"');
+            const isSingle = (dniMode === 'single_sheet' && !!dniDraft.singleDataUrl) || (!dniDraft.frontDataUrl && !dniDraft.backDataUrl && !!dniDraft.singleDataUrl);
+
+            if (!isSingle && !dniDraft.frontDataUrl && !dniDraft.backDataUrl) {
+                showToast(dniMode === 'single_sheet' ? 'Sube la foto del DNI con ambas caras o pulsa "Cargar DNI de Prueba"' : 'Sube al menos una cara del DNI o pulsa "Cargar DNI de Prueba"');
                 return;
             }
-            const title = document.getElementById('dni-title-input').value.trim() || 'Fotocopia DNI (Anverso y Reverso)';
+
+            const defaultTitle = isSingle ? 'Fotocopia DNI (Ambas caras)' : 'Fotocopia DNI (Anverso y Reverso)';
+            const title = document.getElementById('dni-title-input').value.trim() || defaultTitle;
 
             // Save to localStorage if checked
             if (document.getElementById('check-save-dni-memory').checked) {
@@ -2673,8 +2823,10 @@
                     savedDniDocs.unshift({
                         id: 'saved_dni_' + Date.now(),
                         title,
-                        frontDataUrl: dniDraft.frontDataUrl,
-                        backDataUrl: dniDraft.backDataUrl
+                        isSingleSheet: isSingle,
+                        singleDataUrl: isSingle ? dniDraft.singleDataUrl : null,
+                        frontDataUrl: isSingle ? null : dniDraft.frontDataUrl,
+                        backDataUrl: isSingle ? null : dniDraft.backDataUrl
                     });
                     saveDnisToStorage();
                 }
@@ -2683,15 +2835,18 @@
             attachmentsQueue.push({
                 id: 'annex_dni_' + Date.now(),
                 type: 'dni_pair',
+                isSingleSheet: isSingle,
                 title,
-                frontDataUrl: dniDraft.frontDataUrl,
-                backDataUrl: dniDraft.backDataUrl,
+                singleDataUrl: isSingle ? dniDraft.singleDataUrl : null,
+                frontDataUrl: isSingle ? null : dniDraft.frontDataUrl,
+                backDataUrl: isSingle ? null : dniDraft.backDataUrl,
                 pageCount: 1
             });
 
             // Reset draft
             dniDraft.frontDataUrl = null;
             dniDraft.backDataUrl = null;
+            dniDraft.singleDataUrl = null;
             document.getElementById('dni-title-input').value = '';
             updateDniDraftPreviewUI();
             if (isCreatedFromImages) {
@@ -2703,7 +2858,10 @@
         }
 
         function stampDniOnCurrentPage() {
-            const imgToStamp = dniDraft.frontDataUrl || dniDraft.backDataUrl;
+            const imgToStamp = (dniMode === 'single_sheet' && dniDraft.singleDataUrl) 
+                ? dniDraft.singleDataUrl 
+                : (dniDraft.frontDataUrl || dniDraft.backDataUrl || dniDraft.singleDataUrl);
+
             if (!imgToStamp) {
                 showToast('Primero selecciona la foto del DNI o pulsa "Cargar DNI de Prueba"');
                 return;
@@ -2716,7 +2874,7 @@
                 xRatio: lastTapPosition.xRatio,
                 yRatio: lastTapPosition.yRatio,
                 widthRatio: 0.38,
-                heightRatio: 0.18,
+                heightRatio: 0.22,
                 imageData: imgToStamp
             });
             selectElement(newId);
@@ -2738,6 +2896,23 @@
             savedDniDocs.forEach(doc => {
                 const card = document.createElement('div');
                 card.className = 'bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col justify-between gap-2';
+
+                let previewHtml = '';
+                if (doc.isSingleSheet && doc.singleDataUrl) {
+                    previewHtml = `
+                        <div class="bg-white p-1 rounded-lg border border-slate-200 flex items-center justify-center">
+                            <img src="${doc.singleDataUrl}" class="h-16 max-w-full object-contain rounded">
+                        </div>
+                    `;
+                } else {
+                    previewHtml = `
+                        <div class="grid grid-cols-2 gap-1.5 bg-white p-1.5 rounded-lg border border-slate-200">
+                            ${doc.frontDataUrl ? `<img src="${doc.frontDataUrl}" class="h-14 w-full object-contain rounded">` : `<div class="h-14 flex items-center justify-center text-[10px] text-slate-400">Sin anverso</div>`}
+                            ${doc.backDataUrl ? `<img src="${doc.backDataUrl}" class="h-14 w-full object-contain rounded">` : `<div class="h-14 flex items-center justify-center text-[10px] text-slate-400">Sin reverso</div>`}
+                        </div>
+                    `;
+                }
+
                 card.innerHTML = `
                     <div class="flex items-center justify-between gap-1">
                         <span class="text-xs font-bold text-slate-800 truncate"><i class="fa-solid fa-id-card text-indigo-600 mr-1"></i>${escapeHtml(doc.title)}</span>
@@ -2745,10 +2920,7 @@
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
-                    <div class="grid grid-cols-2 gap-1.5 bg-white p-1.5 rounded-lg border border-slate-200">
-                        ${doc.frontDataUrl ? `<img src="${doc.frontDataUrl}" class="h-14 w-full object-contain rounded">` : `<div class="h-14 flex items-center justify-center text-[10px] text-slate-400">Sin anverso</div>`}
-                        ${doc.backDataUrl ? `<img src="${doc.backDataUrl}" class="h-14 w-full object-contain rounded">` : `<div class="h-14 flex items-center justify-center text-[10px] text-slate-400">Sin reverso</div>`}
-                    </div>
+                    ${previewHtml}
                     <button onclick="attachSavedDniToQueue('${doc.id}')" class="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1">
                         <i class="fa-solid fa-plus"></i> Adjuntar al PDF (1 pág.)
                     </button>
@@ -2763,9 +2935,11 @@
             attachmentsQueue.push({
                 id: 'annex_dni_' + Date.now(),
                 type: 'dni_pair',
+                isSingleSheet: !!doc.isSingleSheet,
                 title: doc.title,
-                frontDataUrl: doc.frontDataUrl,
-                backDataUrl: doc.backDataUrl,
+                singleDataUrl: doc.singleDataUrl || null,
+                frontDataUrl: doc.frontDataUrl || null,
+                backDataUrl: doc.backDataUrl || null,
                 pageCount: 1
             });
             if (isCreatedFromImages) {
@@ -3035,13 +3209,18 @@
                 let thumbHtml = '';
                 let badgeType = '';
                 if (item.type === 'dni_pair') {
-                    badgeType = '<span class="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded">Hoja DNI (2 Caras)</span>';
-                    thumbHtml = `
-                        <div class="flex gap-1 shrink-0">
-                            ${item.frontDataUrl ? `<img src="${item.frontDataUrl}" class="w-12 h-8 object-cover rounded border border-slate-300">` : ''}
-                            ${item.backDataUrl ? `<img src="${item.backDataUrl}" class="w-12 h-8 object-cover rounded border border-slate-300">` : ''}
-                        </div>
-                    `;
+                    if (item.isSingleSheet && item.singleDataUrl) {
+                        badgeType = '<span class="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded">Hoja DNI (1 Foto / Ambas Caras)</span>';
+                        thumbHtml = `<img src="${item.singleDataUrl}" class="w-12 h-10 object-cover rounded border border-slate-300 shrink-0">`;
+                    } else {
+                        badgeType = '<span class="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded">Hoja DNI (2 Caras)</span>';
+                        thumbHtml = `
+                            <div class="flex gap-1 shrink-0">
+                                ${item.frontDataUrl ? `<img src="${item.frontDataUrl}" class="w-12 h-8 object-cover rounded border border-slate-300">` : ''}
+                                ${item.backDataUrl ? `<img src="${item.backDataUrl}" class="w-12 h-8 object-cover rounded border border-slate-300">` : ''}
+                            </div>
+                        `;
+                    }
                 } else if (item.type === 'image_page') {
                     badgeType = '<span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded">Imagen / Foto</span>';
                     thumbHtml = `<img src="${item.imageDataUrl}" class="w-12 h-10 object-cover rounded border border-slate-300 shrink-0">`;
@@ -3130,44 +3309,7 @@
                             const copiedPages = await pdfDoc.copyPages(extDoc, extDoc.getPageIndices());
                             copiedPages.forEach((cp) => pdfDoc.addPage(cp));
                         } else if (item.type === 'dni_pair') {
-                            const page = pdfDoc.addPage([595.28, 841.89]);
-                            const { width, height } = page.getSize();
-                            const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-                            page.drawText(item.title || 'DOCUMENTO NACIONAL DE IDENTIDAD (ANEXO)', {
-                                x: 50,
-                                y: height - 55,
-                                size: 13,
-                                font: fontBold,
-                                color: rgb(0.12, 0.16, 0.25)
-                            });
-                            page.drawLine({
-                                start: { x: 50, y: height - 63 },
-                                end: { x: width - 50, y: height - 63 },
-                                thickness: 1,
-                                color: rgb(0.8, 0.84, 0.9)
-                            });
-                            const cardMaxW = 285;
-                            const cardMaxH = 185;
-                            if (item.frontDataUrl) {
-                                const frontImg = await embedDataUrlImage(pdfDoc, item.frontDataUrl);
-                                const dims = frontImg.scaleToFit(cardMaxW, cardMaxH);
-                                page.drawImage(frontImg, {
-                                    x: (width - dims.width) / 2,
-                                    y: height - 115 - dims.height,
-                                    width: dims.width,
-                                    height: dims.height
-                                });
-                            }
-                            if (item.backDataUrl) {
-                                const backImg = await embedDataUrlImage(pdfDoc, item.backDataUrl);
-                                const dims = backImg.scaleToFit(cardMaxW, cardMaxH);
-                                page.drawImage(backImg, {
-                                    x: (width - dims.width) / 2,
-                                    y: height - 365 - dims.height,
-                                    width: dims.width,
-                                    height: dims.height
-                                });
-                            }
+                            await renderDniPageOnPdfDoc(pdfDoc, item);
                         }
                     }
                 } else {
@@ -3185,62 +3327,7 @@
                 if (!isCreatedFromImages) {
                     for (const annex of attachmentsQueue) {
                         if (annex.type === 'dni_pair') {
-                            const page = pdfDoc.addPage([595.28, 841.89]); // Standard A4
-                            const { width, height } = page.getSize();
-
-                            // Header label
-                            page.drawText(annex.title || 'DOCUMENTO NACIONAL DE IDENTIDAD (ANEXO)', {
-                                x: 50,
-                                y: height - 55,
-                                size: 13,
-                                font: fontBold,
-                                color: rgb(0.12, 0.16, 0.25)
-                            });
-                            page.drawLine({
-                                start: { x: 50, y: height - 63 },
-                                end: { x: width - 50, y: height - 63 },
-                                thickness: 1,
-                                color: rgb(0.8, 0.84, 0.9)
-                            });
-
-                            const cardMaxW = 285;
-                            const cardMaxH = 185;
-
-                            if (annex.frontDataUrl) {
-                                page.drawText('ANVERSO (DELANTE):', {
-                                    x: (width - cardMaxW) / 2,
-                                    y: height - 105,
-                                    size: 9.5,
-                                    font: fontBold,
-                                    color: rgb(0.4, 0.45, 0.55)
-                                });
-                                const frontImg = await embedDataUrlImage(pdfDoc, annex.frontDataUrl);
-                                const dims = frontImg.scaleToFit(cardMaxW, cardMaxH);
-                                page.drawImage(frontImg, {
-                                    x: (width - dims.width) / 2,
-                                    y: height - 115 - dims.height,
-                                    width: dims.width,
-                                    height: dims.height
-                                });
-                            }
-
-                            if (annex.backDataUrl) {
-                                page.drawText('REVERSO (DETRÁS):', {
-                                    x: (width - cardMaxW) / 2,
-                                    y: height - 355,
-                                    size: 9.5,
-                                    font: fontBold,
-                                    color: rgb(0.4, 0.45, 0.55)
-                                });
-                                const backImg = await embedDataUrlImage(pdfDoc, annex.backDataUrl);
-                                const dims = backImg.scaleToFit(cardMaxW, cardMaxH);
-                                page.drawImage(backImg, {
-                                    x: (width - dims.width) / 2,
-                                    y: height - 365 - dims.height,
-                                    width: dims.width,
-                                    height: dims.height
-                                });
-                            }
+                            await renderDniPageOnPdfDoc(pdfDoc, annex);
                         } else if (annex.type === 'image_page' && annex.imageDataUrl) {
                             const page = pdfDoc.addPage([595.28, 841.89]);
                             const { width, height } = page.getSize();
