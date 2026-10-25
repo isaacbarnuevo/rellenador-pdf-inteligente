@@ -339,7 +339,7 @@
                 <span>Mis Datos</span>
             </button>
 
-            <button onclick="openModal('modal-signatures')" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-100 border border-slate-700 py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5">
+            <button onclick="openSignaturesModal()" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-100 border border-slate-700 py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5">
                 <div class="flex items-center gap-1">
                     <i class="fa-solid fa-signature text-emerald-400 text-sm"></i>
                     <span id="sig-count-badge" class="bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
@@ -2440,11 +2440,30 @@
             reader.readAsDataURL(file);
         }
 
+        function openSignaturesModal() {
+            renderSignaturesUI();
+            openModal('modal-signatures');
+            if (!sigPadCanvas) {
+                initSignaturePad();
+            }
+        }
+
         function renderSignaturesUI() {
             const container = document.getElementById('saved-signatures-list');
             const badge = document.getElementById('sig-count-badge');
-            badge.textContent = savedSignatures.length;
+            if (badge) badge.textContent = savedSignatures.length;
+            if (!container) return;
             container.innerHTML = '';
+
+            if (savedSignatures.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-1 sm:col-span-2 text-center py-4 px-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500">
+                        <i class="fa-solid fa-pen-nib text-slate-400 text-base mb-1 block"></i>
+                        No tienes firmas guardadas todavía.<br>Dibuja tu firma abajo y pulsa <strong>"Guardar y Estampar"</strong> para usarla siempre con 1 clic.
+                    </div>
+                `;
+                return;
+            }
 
             savedSignatures.forEach(sig => {
                 const card = document.createElement('div');
@@ -2459,8 +2478,8 @@
                     <div onclick="useSavedSignature('${sig.id}')" class="bg-white border border-slate-200 rounded-lg h-16 flex items-center justify-center p-1 cursor-pointer">
                         <img src="${sig.dataUrl}" class="max-h-full max-w-full object-contain" alt="${escapeHtml(sig.name)}">
                     </div>
-                    <button onclick="useSavedSignature('${sig.id}')" class="mt-2 w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold">
-                        Estampar firma
+                    <button onclick="useSavedSignature('${sig.id}')" class="mt-2 w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-stamp"></i> Estampar firma
                     </button>
                 `;
                 container.appendChild(card);
@@ -2472,22 +2491,30 @@
             if (!sig) return;
             placeSignatureOnPdf(sig.dataUrl);
             closeModal('modal-signatures');
-            showToast(`"${sig.name}" colocada. Arrástrala al hueco de firma`);
+            showToast(`Firma "${sig.name}" colocada en el documento`);
         }
 
         function placeSignatureOnPdf(dataUrl) {
             const newId = 'sig_el_' + Date.now();
+            const sigW = 0.24;
+            const sigH = 0.085;
+            // Align signature with the tapped point, ensuring it stays cleanly inside the page
+            const x = Math.max(0.005, Math.min(0.98 - sigW, lastTapPosition.xRatio - 0.02));
+            const y = Math.max(0.005, Math.min(0.98 - sigH, lastTapPosition.yRatio - (sigH * 0.4)));
+
             placedElements.push({
                 id: newId,
                 page: currentPage,
                 type: 'signature',
-                xRatio: lastTapPosition.xRatio,
-                yRatio: lastTapPosition.yRatio,
-                widthRatio: 0.25,
-                heightRatio: 0.085,
+                xRatio: x,
+                yRatio: y,
+                widthRatio: sigW,
+                heightRatio: sigH,
                 imageData: dataUrl
             });
+            renderOverlays();
             selectElement(newId);
+            showToast('Firma colocada en el documento. Puedes moverla o cambiar su tamaño');
         }
 
         function deleteSignature(id) {
@@ -2867,16 +2894,22 @@
                 return;
             }
             const newId = 'img_el_' + Date.now();
+            const imgW = 0.38;
+            const imgH = 0.22;
+            const x = Math.max(0.005, Math.min(0.98 - imgW, lastTapPosition.xRatio));
+            const y = Math.max(0.005, Math.min(0.98 - imgH, lastTapPosition.yRatio - (imgH * 0.4)));
+
             placedElements.push({
                 id: newId,
                 page: currentPage,
                 type: 'image',
-                xRatio: lastTapPosition.xRatio,
-                yRatio: lastTapPosition.yRatio,
-                widthRatio: 0.38,
-                heightRatio: 0.22,
+                xRatio: x,
+                yRatio: y,
+                widthRatio: imgW,
+                heightRatio: imgH,
                 imageData: imgToStamp
             });
+            renderOverlays();
             selectElement(newId);
             closeModal('modal-attachments');
             showToast('Imagen pegada en la hoja actual. Puedes moverla o cambiar su tamaño');
