@@ -65,6 +65,49 @@
             background-color: #ffffff;
         }
 
+        .overlay-item.type-whiteout.resizing {
+            outline: 2.5px dashed #2563eb !important;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.45) !important;
+            animation: pulse-tippex-border 1.1s infinite ease-in-out;
+        }
+
+        @keyframes pulse-tippex-border {
+            0%, 100% { outline-color: #2563eb; }
+            50% { outline-color: #f59e0b; }
+        }
+
+        .tippex-center-btn {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            background: #2563eb;
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 7px;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+            pointer-events: auto;
+            z-index: 60;
+            border: 1px solid rgba(255,255,255,0.85);
+            transition: all 0.15s ease;
+        }
+        .tippex-center-btn:hover {
+            background: #1d4ed8;
+            transform: translate(-50%, -50%) scale(1.08);
+        }
+
+        .stage-crosshair {
+            cursor: crosshair !important;
+        }
+
         /* Tipp-Ex touch / mouse resize handles */
         .tippex-handle {
             position: absolute;
@@ -157,37 +200,20 @@
             </div>
         </div>
 
-        <div class="flex items-center gap-1 sm:gap-1.5">
-            <!-- Load Sample Confirmation PDF -->
-            <button id="btn-demo-pdf" onclick="loadSampleConfirmationPDF(false)" class="bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 px-2 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition" title="Cargar PDF de Confirmación de prueba">
-                <i class="fa-solid fa-file-pdf text-rose-400"></i>
-                <span class="hidden xl:inline">Demo PDF</span>
-            </button>
-
-            <!-- NEW: Test with Sample Word (.docx) Document -->
-            <button id="btn-demo-word" onclick="loadSampleWordDocument()" class="bg-blue-950/90 hover:bg-blue-900 text-sky-300 border border-sky-500/40 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition" title="Probar con un documento Word (.docx) de ejemplo">
-                <i class="fa-solid fa-file-word text-sky-400"></i>
-                <span class="hidden md:inline">Probar Word (.docx)</span>
-                <span class="md:hidden">Word Demo</span>
-            </button>
-
-            <!-- Create PDF from Images -->
-            <label class="bg-indigo-950/90 hover:bg-indigo-900 text-indigo-300 border border-indigo-500/40 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition shadow-sm" title="Crear un nuevo PDF uniendo varias imágenes o fotos">
-                <i class="fa-regular fa-images text-indigo-400"></i>
-                <span class="hidden md:inline">Crear de Fotos</span>
-                <span class="md:hidden">Fotos</span>
-                <input type="file" id="images-to-pdf-upload" accept="image/*,.jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden" onchange="handleCreatePdfFromImagesUpload(event)">
-            </label>
-
-            <!-- Upload real PDF or Word (.docx / .doc) or Project (.rellenador) -->
-            <label class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow-sm">
-                <i class="fa-solid fa-folder-open text-amber-400"></i>
+        <div class="flex items-center gap-1.5 sm:gap-2">
+            <!-- Unified Clean "Abrir Archivo" (Abre modal con selector de archivo, fotos, demos y proyectos) -->
+            <button onclick="openOpenDocumentModal()" class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white border border-blue-400/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm" title="Abrir archivo, crear desde fotos o cargar demos">
+                <i class="fa-solid fa-folder-open text-amber-300"></i>
                 <span>Abrir Archivo</span>
-                <input type="file" id="pdf-upload" accept=".pdf,.docx,.doc,.rellenador,.json,image/*,.jpg,.jpeg,.png,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/json" multiple class="hidden" onchange="handleFileUpload(event)">
-            </label>
+                <i class="fa-solid fa-chevron-down text-[10px] opacity-80"></i>
+            </button>
+
+            <!-- Hidden Inputs to support file selection -->
+            <input type="file" id="pdf-upload" accept=".pdf,.docx,.doc,.rellenador,.json,image/*,.jpg,.jpeg,.png,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/json" multiple class="hidden" onchange="handleFileUpload(event)">
+            <input type="file" id="images-to-pdf-upload" accept="image/*,.jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden" onchange="handleCreatePdfFromImagesUpload(event)">
 
             <!-- Drafts / Saved Projects Manager (Edit anytime without starting from scratch) -->
-            <button onclick="openDraftsModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm" title="Borradores y proyectos para editar en cualquier momento">
+            <button onclick="openDraftsModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm" title="Borradores y proyectos para editar en cualquier momento">
                 <i class="fa-solid fa-clock-rotate-left text-sky-400"></i>
                 <span class="hidden sm:inline">Borradores</span>
                 <span id="top-drafts-badge" class="bg-sky-500/20 text-sky-300 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
@@ -268,11 +294,18 @@
 
             <!-- Tipp-Ex Custom Width / Height Controls & Presets -->
             <div id="whiteout-size-controls" class="hidden items-center gap-1.5 flex-wrap">
+                <!-- 1-Click Tap Destination Resize Button -->
+                <button id="btn-tippex-click-resize" onclick="toggleTippExClickResize()" class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-xs font-bold text-white flex items-center gap-1.5 shadow-sm border border-indigo-400/50" title="Toca en el documento donde quieres que termine el recuadro blanco">
+                    <i class="fa-solid fa-crosshairs text-amber-300"></i>
+                    <span>Redimensionar con 1 clic</span>
+                </button>
+
                 <div class="flex items-center gap-1 bg-rose-950/90 px-2 py-1 rounded-lg border border-rose-700/60 text-xs">
                     <span class="text-rose-300 font-bold flex items-center gap-1 mr-1"><i class="fa-solid fa-eraser"></i> Tipp-Ex</span>
                     <button onclick="setTippExPreset('word')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 active:bg-rose-700 text-[11px] font-semibold text-slate-200" title="Tamaño 1 palabra">Palabra</button>
                     <button onclick="setTippExPreset('medium')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 active:bg-rose-700 text-[11px] font-semibold text-slate-200" title="Tamaño medio renglón">Medio</button>
-                    <button onclick="setTippExPreset('full_line')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 active:bg-rose-700 text-[11px] font-semibold text-slate-200" title="Tamaño línea entera">Línea</button>
+                    <button onclick="setTippExPreset('full_line')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 active:bg-rose-700 text-[11px] font-semibold text-slate-200" title="Tamaño renglón entero">Línea</button>
+                    <button onclick="setTippExPreset('two_lines')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 active:bg-rose-700 text-[11px] font-semibold text-slate-200" title="Tapar 2 renglones">2 Líneas</button>
                 </div>
 
                 <!-- Fine Dimensions +/- -->
@@ -339,6 +372,13 @@
 
     <!-- MAIN WORKSPACE: SCROLLABLE PDF CANVAS + OVERLAY CONTAINER -->
     <main id="pdf-workspace" class="flex-1 overflow-auto relative flex flex-col items-center justify-start p-3 sm:p-6 select-none gap-4">
+        <!-- Floating Helper Banner when 1-Click Tipp-Ex Resize is active -->
+        <div id="tippex-resize-indicator" class="hidden sticky top-2 z-40 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white text-xs font-bold px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border border-white/40 animate-pulse">
+            <i class="fa-solid fa-crosshairs text-amber-300"></i>
+            <span>Toca en el PDF donde quieres que termine el Tipp-Ex</span>
+            <button onclick="cancelTippExClickResize()" class="ml-2 bg-black/30 hover:bg-black/50 px-2.5 py-0.5 rounded-full text-[10px] text-white transition">&times; Cancelar</button>
+        </div>
+
         <!-- Wrapper that matches exact PDF canvas dimensions -->
         <div id="pdf-stage" class="relative shadow-2xl bg-white rounded-sm overflow-hidden transition-all duration-75 shrink-0" style="width: 595px; height: 842px;">
             <canvas id="pdf-canvas" class="block w-full h-full pointer-events-none"></canvas>
@@ -436,6 +476,107 @@
             </button>
         </div>
     </footer>
+
+    <!-- ========================================== -->
+    <!-- MODAL 0: ABRIR O CREAR DOCUMENTO           -->
+    <!-- ========================================== -->
+    <div id="modal-open-document" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-slate-900 border border-slate-700 text-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden animate-fade-in max-h-[92vh] flex flex-col">
+            <!-- Header -->
+            <div class="bg-slate-950 text-white px-4 py-3.5 flex items-center justify-between border-b border-slate-800 shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white text-sm shadow-inner">
+                        <i class="fa-solid fa-folder-open"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm sm:text-base">Abrir o Crear Documento</h3>
+                        <p class="text-[11px] text-slate-400">Selecciona cómo deseas comenzar tu documento</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-open-document')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800/80">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="p-3.5 sm:p-5 space-y-3 overflow-y-auto">
+                <!-- Option 1: Open Device File (PDF, Word, Images, Project) -->
+                <button onclick="triggerDeviceFileUpload()" class="w-full text-left bg-gradient-to-r from-blue-900/40 via-blue-900/20 to-slate-800/90 hover:from-blue-900/60 hover:to-slate-700/90 border border-blue-500/40 hover:border-blue-400 p-3.5 rounded-xl transition flex items-center justify-between group shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white text-lg shrink-0 group-hover:scale-105 transition shadow">
+                            <i class="fa-solid fa-file-arrow-up"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                                <span>Abrir archivo de mi dispositivo</span>
+                                <span class="bg-blue-500/30 text-blue-300 text-[10px] px-2 py-0.2 rounded-full font-semibold border border-blue-400/30">Principal</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 mt-0.5">Soporta PDF, Word (.docx), fotos o proyectos (.rellenador)</p>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-slate-400 group-hover:text-blue-300 transition shrink-0 ml-2"></i>
+                </button>
+
+                <!-- Option 2: Create PDF from Multiple Photos -->
+                <button onclick="triggerPhotosToPdfUpload()" class="w-full text-left bg-slate-800/80 hover:bg-slate-700/80 border border-indigo-500/30 hover:border-indigo-400/60 p-3.5 rounded-xl transition flex items-center justify-between group shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-lg shrink-0 group-hover:scale-105 transition shadow">
+                            <i class="fa-solid fa-images"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs sm:text-sm font-bold text-white">Crear PDF uniendo varias fotos</div>
+                            <p class="text-[11px] text-slate-300 mt-0.5">Une y ordena varias imágenes de tu galería en 1 solo PDF</p>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-slate-400 group-hover:text-indigo-300 transition shrink-0 ml-2"></i>
+                </button>
+
+                <!-- Option 3: Drafts / Saved Projects -->
+                <button onclick="closeModal('modal-open-document'); openDraftsModal();" class="w-full text-left bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 hover:border-slate-600 p-3 rounded-xl transition flex items-center justify-between group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg bg-sky-600/30 text-sky-300 border border-sky-400/30 flex items-center justify-center text-base shrink-0">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs sm:text-sm font-semibold text-slate-200">Mis borradores guardados</div>
+                            <p class="text-[11px] text-slate-400">Reanudar la edición de documentos anteriores sin empezar de cero</p>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-slate-500 group-hover:text-sky-300 transition shrink-0 ml-2"></i>
+                </button>
+
+                <!-- Section: Documentos de Prueba / Demos -->
+                <div class="pt-2 border-t border-slate-800">
+                    <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <i class="fa-solid fa-flask text-amber-400"></i>
+                        <span>Documentos de prueba y demostración (Demo)</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button onclick="closeModal('modal-open-document'); loadSampleConfirmationPDF(false);" class="text-left bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700 hover:border-amber-500/50 p-2.5 rounded-xl transition flex items-center gap-2.5 group">
+                            <div class="w-8 h-8 rounded-lg bg-rose-600/20 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0">
+                                <i class="fa-solid fa-file-pdf"></i>
+                            </div>
+                            <div class="overflow-hidden">
+                                <div class="text-xs font-bold text-white group-hover:text-amber-300 transition">Demo PDF</div>
+                                <p class="text-[10px] text-slate-400 truncate">Formulario Confirmación</p>
+                            </div>
+                        </button>
+
+                        <button onclick="closeModal('modal-open-document'); loadSampleWordDocument();" class="text-left bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700 hover:border-sky-500/50 p-2.5 rounded-xl transition flex items-center gap-2.5 group">
+                            <div class="w-8 h-8 rounded-lg bg-sky-600/20 text-sky-400 border border-sky-500/30 flex items-center justify-center shrink-0">
+                                <i class="fa-solid fa-file-word"></i>
+                            </div>
+                            <div class="overflow-hidden">
+                                <div class="text-xs font-bold text-white group-hover:text-sky-300 transition">Probar Word (.docx)</div>
+                                <p class="text-[10px] text-slate-400 truncate">Plantilla editable</p>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- ========================================== -->
     <!-- MODAL 1: ADD / EDIT TEXT (WITH AUTO-SAVE)  -->
@@ -2122,9 +2263,101 @@
         }
 
         // ============================================================================
-        // FREE-POSITIONING OVERLAYS (TEXT & TRANSPARENT SIGNATURES)
+        // ABRIR O CREAR DOCUMENTO (HELPER FUNCTIONS)
         // ============================================================================
+        function openOpenDocumentModal() {
+            openModal('modal-open-document');
+        }
+
+        function triggerDeviceFileUpload() {
+            closeModal('modal-open-document');
+            const input = document.getElementById('pdf-upload');
+            if (input) input.click();
+        }
+
+        function triggerPhotosToPdfUpload() {
+            closeModal('modal-open-document');
+            const input = document.getElementById('images-to-pdf-upload');
+            if (input) input.click();
+        }
+
+        // ============================================================================
+        // FREE-POSITIONING OVERLAYS & TIPP-EX 1-CLIC RESIZE MODE
+        // ============================================================================
+        let isTippExClickResizeActive = false;
+
+        function toggleTippExClickResize() {
+            if (isTippExClickResizeActive) {
+                cancelTippExClickResize();
+            } else {
+                activateTippExClickResize();
+            }
+        }
+
+        function activateTippExClickResize() {
+            if (!selectedElementId) return;
+            const item = placedElements.find(el => el.id === selectedElementId && el.type === 'whiteout');
+            if (!item) return;
+
+            isTippExClickResizeActive = true;
+            const indicator = document.getElementById('tippex-resize-indicator');
+            if (indicator) indicator.classList.remove('hidden');
+            const layer = document.getElementById('overlay-layer');
+            if (layer) layer.classList.add('stage-crosshair');
+
+            showToast('🎯 Modo 2 clics: Toca en el PDF donde quieres que termine el recuadro blanco', 4500);
+            renderOverlays();
+            updateSelectionToolbarUI();
+        }
+
+        function cancelTippExClickResize() {
+            isTippExClickResizeActive = false;
+            const indicator = document.getElementById('tippex-resize-indicator');
+            if (indicator) indicator.classList.add('hidden');
+            const layer = document.getElementById('overlay-layer');
+            if (layer) layer.classList.remove('stage-crosshair');
+
+            renderOverlays();
+            updateSelectionToolbarUI();
+        }
+
         function handleStageTap(event) {
+            // Check if 1-click Tipp-Ex resize mode is currently active
+            if (isTippExClickResizeActive && selectedElementId) {
+                const item = placedElements.find(el => el.id === selectedElementId && el.type === 'whiteout');
+                if (item) {
+                    const stage = document.getElementById('overlay-layer');
+                    const rect = stage.getBoundingClientRect();
+                    const clickX = event.clientX - rect.left;
+                    const clickY = event.clientY - rect.top;
+                    const tapXRatio = Math.max(0.005, Math.min(0.99, clickX / rect.width));
+                    const tapYRatio = Math.max(0.005, Math.min(0.99, clickY / rect.height));
+
+                    // Adjust width
+                    if (tapXRatio > item.xRatio) {
+                        item.widthRatio = Math.max(0.02, Math.min(0.99 - item.xRatio, tapXRatio - item.xRatio));
+                    } else {
+                        const newW = item.xRatio - tapXRatio;
+                        item.xRatio = tapXRatio;
+                        item.widthRatio = Math.max(0.02, newW);
+                    }
+
+                    // Adjust height if tapped clearly below the line
+                    if (tapYRatio > item.yRatio) {
+                        const vDiff = tapYRatio - item.yRatio;
+                        if (vDiff > 0.024) {
+                            item.heightRatio = Math.max(0.018, Math.min(0.99 - item.yRatio, vDiff));
+                        }
+                    }
+
+                    cancelTippExClickResize();
+                    renderOverlays();
+                    scheduleAutoSave();
+                    showToast('✅ Tamaño del Tipp-Ex ajustado al punto marcado');
+                    return;
+                }
+            }
+
             if (event.target.id !== 'overlay-layer') return;
 
             const rect = event.currentTarget.getBoundingClientRect();
@@ -2196,10 +2429,26 @@
                     el.style.boxShadow = item.id === selectedElementId ? 'none' : '0 0 0 1px rgba(203, 213, 225, 0.9) inset';
                     el.style.borderRadius = '2px';
                     el.style.zIndex = '15';
-                    el.title = 'Tipp-Ex (Tapa texto). Arrastra los tiradores para ensanchar o afinar';
+                    el.title = 'Tipp-Ex (Tapa texto). Haz clic en él o en el tirador para redimensionar al siguiente toque';
 
-                    // When selected, attach direct visual drag handles for touch & mouse
+                    // When selected, attach direct visual drag handles and 1-click resize helper
                     if (item.id === selectedElementId) {
+                        if (isTippExClickResizeActive) {
+                            el.classList.add('resizing');
+                        }
+
+                        // Central action pill button to trigger 1-click resize
+                        const centerBtn = document.createElement('div');
+                        centerBtn.className = 'tippex-center-btn';
+                        centerBtn.innerHTML = '<i class="fa-solid fa-crosshairs text-[10px]"></i><span>1-Clic</span>';
+                        centerBtn.title = 'Toca aquí y luego en el PDF donde termina el texto';
+                        centerBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+                        centerBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            toggleTippExClickResize();
+                        });
+                        el.appendChild(centerBtn);
+
                         const handleE = document.createElement('div');
                         handleE.className = 'tippex-handle tippex-handle-e';
                         handleE.title = 'Arrastra para ensanchar';
@@ -2214,7 +2463,7 @@
 
                         const handleSE = document.createElement('div');
                         handleSE.className = 'tippex-handle tippex-handle-se';
-                        handleSE.title = 'Arrastra para cambiar tamaño';
+                        handleSE.title = 'Arrastra o haz clic para redimensionar con 1 toque en el PDF';
                         attachTippExResizeHandle(handleSE, item, 'se');
                         el.appendChild(handleSE);
                     }
@@ -2242,6 +2491,7 @@
                 const startHeight = (item.heightRatio || 0.018) * stageHeight;
                 const layer = document.getElementById('overlay-layer');
                 const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
+                let hasMoved = false;
 
                 if (handleNode.setPointerCapture) {
                     try { handleNode.setPointerCapture(e.pointerId); } catch (_) {}
@@ -2251,6 +2501,9 @@
                     if (me.cancelable) me.preventDefault();
                     const dx = me.clientX - startPointerX;
                     const dy = me.clientY - startPointerY;
+                    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+                        hasMoved = true;
+                    }
 
                     const curW = baseViewportWidth * currentZoom;
                     const curH = baseViewportHeight * currentZoom;
@@ -2274,6 +2527,13 @@
                     window.removeEventListener('pointermove', onPointerMove);
                     window.removeEventListener('pointerup', onPointerUp);
                     window.removeEventListener('pointercancel', onPointerUp);
+
+                    // If user tapped without dragging, activate 1-click resize mode!
+                    if (!hasMoved) {
+                        toggleTippExClickResize();
+                        return;
+                    }
+
                     scheduleAutoSave();
                 };
 
@@ -2287,12 +2547,15 @@
             let startPointerX = 0, startPointerY = 0;
             let startLeft = 0, startTop = 0;
             let isDragging = false;
+            let hasMoved = false;
+            let wasAlreadySelected = false;
 
             const onPointerDown = (e) => {
-                if (e.target.classList.contains('tippex-handle')) return;
+                if (e.target.classList.contains('tippex-handle') || e.target.classList.contains('tippex-center-btn')) return;
                 if (e.button !== undefined && e.button !== 0) return;
                 e.stopPropagation();
 
+                wasAlreadySelected = (selectedElementId === item.id);
                 selectElement(item.id);
 
                 const stageWidth = baseViewportWidth * currentZoom;
@@ -2303,6 +2566,7 @@
                 startLeft = parseFloat(domNode.style.left) || (item.xRatio * stageWidth);
                 startTop = parseFloat(domNode.style.top) || (item.yRatio * stageHeight);
                 isDragging = true;
+                hasMoved = false;
 
                 domNode.style.cursor = 'grabbing';
                 if (domNode.setPointerCapture) {
@@ -2315,6 +2579,9 @@
 
                     const dx = me.clientX - startPointerX;
                     const dy = me.clientY - startPointerY;
+                    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+                        hasMoved = true;
+                    }
 
                     const curW = baseViewportWidth * currentZoom;
                     const curH = baseViewportHeight * currentZoom;
@@ -2341,6 +2608,17 @@
                     domNode.removeEventListener('pointermove', onPointerMove);
                     domNode.removeEventListener('pointerup', onPointerUp);
                     domNode.removeEventListener('pointercancel', onPointerUp);
+
+                    // If user tapped on an already-selected Tipp-Ex without dragging, toggle 1-click resize mode!
+                    if (!hasMoved && item.type === 'whiteout') {
+                        if (wasAlreadySelected) {
+                            toggleTippExClickResize();
+                            return;
+                        }
+                    }
+
+                    renderOverlays();
+                    scheduleAutoSave();
                 };
 
                 domNode.addEventListener('pointermove', onPointerMove);
@@ -2356,6 +2634,8 @@
                 selectElement(item.id);
                 if (item.type === 'text') {
                     openEditSelectedModal();
+                } else if (item.type === 'whiteout') {
+                    toggleTippExClickResize();
                 }
             });
         }
@@ -2383,9 +2663,12 @@
 
         function deselectAll() {
             selectedElementId = null;
+            if (isTippExClickResizeActive) {
+                cancelTippExClickResize();
+            }
             const layer = document.getElementById('overlay-layer');
             if (layer) {
-                Array.from(layer.children).forEach(child => child.classList.remove('selected'));
+                Array.from(layer.children).forEach(child => child.classList.remove('selected', 'resizing'));
             }
             updateSelectionToolbarUI();
         }
@@ -2423,6 +2706,17 @@
                 if (editBtn) editBtn.classList.add('hidden');
                 if (whiteoutSizeControls) whiteoutSizeControls.classList.remove('hidden');
                 if (whiteoutColorControls) whiteoutColorControls.classList.remove('hidden');
+
+                const btn1Click = document.getElementById('btn-tippex-click-resize');
+                if (btn1Click) {
+                    if (isTippExClickResizeActive) {
+                        btn1Click.className = 'px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 active:scale-95 text-xs font-bold text-slate-950 flex items-center gap-1.5 shadow-md border border-amber-300 animate-pulse';
+                        btn1Click.innerHTML = '<i class="fa-solid fa-crosshairs"></i><span>Toca en el PDF...</span>';
+                    } else {
+                        btn1Click.className = 'px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-xs font-bold text-white flex items-center gap-1.5 shadow-sm border border-indigo-400/50';
+                        btn1Click.innerHTML = '<i class="fa-solid fa-crosshairs text-amber-300"></i><span>Redimensionar con 1 clic</span>';
+                    }
+                }
             } else {
                 if (generalSizeControls) generalSizeControls.classList.remove('hidden');
                 const pct = Math.round((item.widthRatio / 0.24) * 100);
@@ -2489,6 +2783,9 @@
             } else if (preset === 'full_line') {
                 item.widthRatio = 0.58;
                 item.heightRatio = 0.018;
+            } else if (preset === 'two_lines') {
+                item.widthRatio = 0.58;
+                item.heightRatio = 0.036; // ~30px (2 líneas)
             }
             if (domNode) {
                 domNode.style.width = (item.widthRatio * stageWidth) + 'px';
