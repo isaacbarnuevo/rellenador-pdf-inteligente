@@ -1846,7 +1846,7 @@
             }
 
             // CASE 3: Single file or Multiple files (mixture of PDFs, images, Word docs selected with CTRL / Shift)
-            showToast(files.length > 1 ? `Abriendo y uniendo ${files.length} documentos seleccionados...` : 'Abriendo documento...');
+            showToast(files.length > 1 ? `Uniendo ${files.length} documentos en un solo PDF continuo y editable...` : 'Cargando documento...');
 
             // Clear previous elements & queue
             placedElements = [];
@@ -1856,98 +1856,65 @@
             attachmentsQueue = [];
             isCreatedFromImages = false;
 
-            // Pick the primary file to open in the main interactive editor:
-            // Prefer the first PDF or Word document as primary; if none, the first image.
-            let mainIdx = files.findIndex(f => isPdf(f) || isWord(f));
-            if (mainIdx < 0) mainIdx = 0;
-
-            const mainFile = files[mainIdx];
-            const otherFiles = files.filter((_, idx) => idx !== mainIdx);
-
-            originalUploadedFileName = (mainFile.name || 'documento').replace(/\.[^/.]+$/, '');
+            const primaryFile = files[0];
+            originalUploadedFileName = (primaryFile.name || 'documento').replace(/\.[^/.]+$/, '');
             currentDocumentTitle = null;
 
             try {
-                // 1. Load Main File
-                if (isWord(mainFile)) {
-                    await handleMainWordUpload(mainFile);
-                } else if (isPdf(mainFile)) {
-                    currentPdfFileName = mainFile.name;
-                    const arrayBuffer = await mainFile.arrayBuffer();
-                    await loadPdfFromBytes(new Uint8Array(arrayBuffer));
-                } else if (isImage(mainFile)) {
-                    // Main file is an image, convert it as initial PDF page
-                    const { PDFDocument } = PDFLib;
-                    const pdfDoc = await PDFDocument.create();
-                    const dataUrl = await compressAndNormalizeImage(mainFile, 1600, 0.90);
-                    const embeddedImg = await embedDataUrlImage(pdfDoc, dataUrl);
-                    const a4W = 595.28, a4H = 841.89;
-                    const page = pdfDoc.addPage([a4W, a4H]);
-                    const dims = embeddedImg.scaleToFit(a4W - 40, a4H - 40);
-                    page.drawImage(embeddedImg, {
-                        x: (a4W - dims.width) / 2,
-                        y: (a4H - dims.height) / 2,
-                        width: dims.width,
-                        height: dims.height
-                    });
-                    const generatedBytes = await pdfDoc.save();
-                    await loadPdfFromBytes(generatedBytes);
-                }
+                const { PDFDocument } = PDFLib;
+                const mergedDoc = await PDFDocument.create();
 
-                // 2. Load all remaining selected files directly into attachmentsQueue
-                for (let i = 0; i < otherFiles.length; i++) {
-                    const extraFile = otherFiles[i];
+                for (let i = 0; i < files.length; i++) {
+                    const f = files[i];
                     try {
-                        if (isPdf(extraFile)) {
-                            const ab = await extraFile.arrayBuffer();
-                            const uint8 = new Uint8Array(ab);
-                            const extDoc = await PDFLib.PDFDocument.load(uint8);
-                            attachmentsQueue.push({
-                                id: 'annex_pdf_' + Date.now() + '_' + i,
-                                type: 'external_pdf',
-                                title: extraFile.name,
-                                pdfBytes: uint8,
-                                pageCount: extDoc.getPageCount()
-                            });
-                        } else if (isImage(extraFile)) {
-                            const dataUrl = await compressAndNormalizeImage(extraFile, 1600, 0.90);
-                            attachmentsQueue.push({
-                                id: 'annex_img_' + Date.now() + '_' + i,
-                                type: 'image_page',
-                                title: extraFile.name.replace(/\.[^/.]+$/, ''),
-                                imageDataUrl: dataUrl,
-                                pageCount: 1
-                            });
-                        } else if (isWord(extraFile)) {
-                            const html = await extractHtmlFromWordFile(extraFile);
-                            const convertedBytes = await convertWordHtmlToPdfBytes(html);
-                            const extDoc = await PDFLib.PDFDocument.load(convertedBytes);
-                            attachmentsQueue.push({
-                                id: 'annex_word_' + Date.now() + '_' + i,
-                                type: 'external_pdf',
-                                isFromWord: true,
-                                title: extraFile.name + ' (Word)',
-                                pdfBytes: convertedBytes,
-                                pageCount: extDoc.getPageCount()
+                        if (isPdf(f)) {
+                            const ab = await f.arrayBuffer();
+                            const doc = await PDFDocument.load(new Uint8Array(ab));
+                            const copied = await mergedDoc.copyPages(doc, doc.getPageIndices());
+                            copied.forEach(p => mergedDoc.addPage(p));
+                        } else if (isWord(f)) {
+                            const html = await extractHtmlFromWordFile(f);
+                            const wordBytes = await convertWordHtmlToPdfBytes(html);
+                            const doc = await PDFDocument.load(wordBytes);
+                            const copied = await mergedDoc.copyPages(doc, doc.getPageIndices());
+                            copied.forEach(p => mergedDoc.addPage(p));
+                        } else if (isImage(f)) {
+                            const dataUrl = await compressAndNormalizeImage(f, 1600, 0.90);
+                            const embedded = await embedDataUrlImage(mergedDoc, dataUrl);
+                            const a4W = 595.28, a4H = 841.89;
+                            const page = mergedDoc.addPage([a4W, a4H]);
+                            const dims = embedded.scaleToFit(a4W - 40, a4H - 40);
+                            page.drawImage(embedded, {
+                                x: (a4W - dims.width) / 2,
+                                y: (a4H - dims.height) / 2,
+                                width: dims.width,
+                                height: dims.height
                             });
                         }
-                    } catch (errAnnex) {
-                        console.warn(`Error anexando archivo ${extraFile.name}:`, errAnnex);
+                    } catch (errFile) {
+                        console.error(`Error procesando archivo ${f.name}:`, errFile);
+                        showToast(`No se pudo procesar: ${f.name}`);
                     }
                 }
 
-                // Update UI badges, scroll previews and indicators
-                updateAttachmentsBadgesAndSummary();
-                await renderAllDocumentPages();
+                if (mergedDoc.getPageCount() === 0) {
+                    showToast('No se pudieron extraer páginas de los archivos seleccionados');
+                    event.target.value = '';
+                    return;
+                }
 
-                if (otherFiles.length > 0) {
-                    showToast(`✅ ${files.length} documentos unidos: 1 principal y ${otherFiles.length} anexo(s) listos para generar PDF`, 5500);
+                currentPdfBytes = await mergedDoc.save();
+                await loadPdfFromBytes(currentPdfBytes);
+                updateAttachmentsBadgesAndSummary();
+
+                if (files.length > 1) {
+                    showToast(`✅ ${files.length} archivos unidos (${totalPages} páginas). ¡Toca en CUALQUIERA de ellas para escribir o firmar!`, 6500);
                 } else {
-                    showToast('Documento cargado correctamente');
+                    showToast(`Documento abierto (${totalPages} páginas). Toca cualquier página para escribir.`);
                 }
             } catch (err) {
-                console.error('Error cargando lote de archivos:', err);
-                showToast('No se pudieron procesar todos los archivos seleccionados');
+                console.error('Error al unir archivos:', err);
+                showToast('Error al abrir los archivos seleccionados');
             }
             event.target.value = '';
         }
@@ -2825,151 +2792,16 @@
 
         async function renderVisualAnnexPages(cssWidth, cssHeight) {
             const annexContainer = document.getElementById('annex-previews-container');
-            if (!annexContainer) return;
-            annexContainer.innerHTML = '';
+            if (annexContainer) annexContainer.innerHTML = '';
 
-            const extraItems = isCreatedFromImages ? [] : attachmentsQueue;
             const banner = document.getElementById('workspace-annex-banner');
-
-            if (extraItems.length === 0) {
-                if (banner) banner.classList.remove('hidden');
-                return;
-            }
-
-            if (banner) banner.classList.add('hidden');
-
-            const totalExtraPages = extraItems.reduce((acc, item) => acc + (item.pageCount || 1), 0);
-
-            // Header separator between main document and annexes
-            const header = document.createElement('div');
-            header.className = 'flex items-center gap-3 w-full my-4 px-2';
-            header.style.maxWidth = cssWidth + 'px';
-            header.innerHTML = `
-                <div class="h-px bg-gradient-to-r from-transparent via-indigo-500/60 to-transparent flex-1"></div>
-                <div class="bg-indigo-950/90 border border-indigo-500/50 text-indigo-200 px-3.5 py-1.5 rounded-full text-xs font-bold shadow-lg flex items-center gap-2">
-                    <i class="fa-solid fa-paperclip text-amber-300"></i>
-                    <span>PÁGINAS DE ANEXOS QUE SE UNIRÁN AL FINAL (${totalExtraPages} pág.)</span>
-                </div>
-                <div class="h-px bg-gradient-to-r from-transparent via-indigo-500/60 to-transparent flex-1"></div>
-            `;
-            annexContainer.appendChild(header);
-
-            // Render each attachment preview as a true A4 page container
-            for (let idx = 0; idx < extraItems.length; idx++) {
-                const item = extraItems[idx];
-
-                if (item.type === 'dni_pair') {
-                    const card = document.createElement('div');
-                    card.className = 'page-wrapper flex flex-col items-center w-full max-w-full mb-6';
-                    card.innerHTML = `
-                        <div class="flex items-center justify-between w-full mb-1.5 px-2 text-xs text-indigo-300 font-medium" style="max-width: ${cssWidth}px;">
-                            <span class="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-indigo-700/60 shadow-sm">
-                                <i class="fa-solid fa-id-card text-amber-400"></i>
-                                <span class="font-bold">Anexo ${idx + 1}: ${escapeHtml(item.title || 'DNI')}</span>
-                            </span>
-                            <button onclick="openModal('modal-attachments')" class="text-[11px] text-indigo-400 hover:text-indigo-200 transition underline">Gestionar / Reordenar</button>
-                        </div>
-                        <div class="relative shadow-2xl bg-white rounded-sm overflow-hidden flex flex-col items-center justify-center p-6 sm:p-10 shrink-0" style="width: ${cssWidth}px; height: ${cssHeight}px;">
-                            <div class="w-full text-center pb-4 border-b border-slate-200 mb-6">
-                                <h3 class="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-wider">DOCUMENTO NACIONAL DE IDENTIDAD</h3>
-                                <p class="text-[10px] text-slate-500 mt-0.5">Fotocopia oficial para adjuntar al expediente</p>
-                            </div>
-                            <div class="flex-1 w-full flex flex-col items-center justify-center gap-6">
-                                ${item.isSingleSheet || item.singleDataUrl ? `
-                                    <div class="w-full max-w-[85%] max-h-[75%] border border-slate-300 shadow-md rounded-xl overflow-hidden bg-slate-50 flex items-center justify-center p-2">
-                                        <img src="${item.singleDataUrl || item.frontDataUrl}" class="max-h-full max-w-full object-contain pointer-events-none select-none rounded" />
-                                    </div>
-                                ` : `
-                                    <div class="w-full max-w-[82%] border border-slate-300 shadow-md rounded-xl overflow-hidden bg-slate-50 p-2 flex flex-col items-center">
-                                        <div class="text-[10px] text-slate-500 font-semibold mb-1 w-full text-left">Anverso:</div>
-                                        <img src="${item.frontDataUrl}" class="max-h-36 sm:max-h-48 object-contain pointer-events-none select-none rounded" />
-                                    </div>
-                                    <div class="w-full max-w-[82%] border border-slate-300 shadow-md rounded-xl overflow-hidden bg-slate-50 p-2 flex flex-col items-center">
-                                        <div class="text-[10px] text-slate-500 font-semibold mb-1 w-full text-left">Reverso:</div>
-                                        <img src="${item.backDataUrl}" class="max-h-36 sm:max-h-48 object-contain pointer-events-none select-none rounded" />
-                                    </div>
-                                `}
-                            </div>
-                        </div>
-                    `;
-                    annexContainer.appendChild(card);
-                } else if (item.type === 'image_page') {
-                    const card = document.createElement('div');
-                    card.className = 'page-wrapper flex flex-col items-center w-full max-w-full mb-6';
-                    card.innerHTML = `
-                        <div class="flex items-center justify-between w-full mb-1.5 px-2 text-xs text-indigo-300 font-medium" style="max-width: ${cssWidth}px;">
-                            <span class="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-indigo-700/60 shadow-sm">
-                                <i class="fa-solid fa-image text-amber-400"></i>
-                                <span class="font-bold">Anexo ${idx + 1}: ${escapeHtml(item.title || 'Foto documento')}</span>
-                            </span>
-                            <button onclick="openModal('modal-attachments')" class="text-[11px] text-indigo-400 hover:text-indigo-200 transition underline">Gestionar / Reordenar</button>
-                        </div>
-                        <div class="relative shadow-2xl bg-white rounded-sm overflow-hidden flex items-center justify-center p-4 shrink-0" style="width: ${cssWidth}px; height: ${cssHeight}px;">
-                            <img src="${item.imageDataUrl}" class="max-w-[94%] max-h-[94%] object-contain pointer-events-none select-none shadow-sm rounded" />
-                        </div>
-                    `;
-                    annexContainer.appendChild(card);
-                } else if (item.type === 'external_pdf' && item.pdfBytes) {
-                    try {
-                        const extLoading = pdfjsLib.getDocument({ data: item.pdfBytes.slice(0) });
-                        const extDoc = await extLoading.promise;
-                        const numExtPages = extDoc.numPages;
-
-                        for (let ep = 1; ep <= numExtPages; ep++) {
-                            const extPage = await extDoc.getPage(ep);
-                            const card = document.createElement('div');
-                            card.className = 'page-wrapper flex flex-col items-center w-full max-w-full mb-6';
-                            const canvasId = `ext-pdf-canvas-${idx}-${ep}`;
-                            card.innerHTML = `
-                                <div class="flex items-center justify-between w-full mb-1.5 px-2 text-xs text-indigo-300 font-medium" style="max-width: ${cssWidth}px;">
-                                    <span class="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-indigo-700/60 shadow-sm">
-                                        <i class="fa-solid fa-file-pdf text-rose-400"></i>
-                                        <span class="font-bold">Anexo ${idx + 1}: ${escapeHtml(item.title || 'PDF')} (Pág ${ep}/${numExtPages})</span>
-                                    </span>
-                                    <button onclick="openModal('modal-attachments')" class="text-[11px] text-indigo-400 hover:text-indigo-200 transition underline">Gestionar / Reordenar</button>
-                                </div>
-                                <div class="relative shadow-2xl bg-white rounded-sm overflow-hidden shrink-0" style="width: ${cssWidth}px; height: ${cssHeight}px;">
-                                    <canvas id="${canvasId}" class="block w-full h-full pointer-events-none"></canvas>
-                                </div>
-                            `;
-                            annexContainer.appendChild(card);
-
-                            const pixelRatio = Math.max(window.devicePixelRatio || 1, 2);
-                            const viewport = extPage.getViewport({ scale: currentZoom * pixelRatio });
-                            const canEl = document.getElementById(canvasId);
-                            if (canEl) {
-                                canEl.width = viewport.width;
-                                canEl.height = viewport.height;
-                                await extPage.render({ canvasContext: canEl.getContext('2d'), viewport }).promise;
-                            }
-                        }
-                    } catch (err) {
-                        console.warn('Could not render external PDF preview:', err);
-                    }
+            if (banner) {
+                banner.classList.remove('hidden');
+                const bannerSub = document.getElementById('workspace-annex-sub');
+                if (bannerSub) {
+                    bannerSub.innerHTML = `Documento de <strong>${totalPages} página(s)</strong> editables. Toca aquí para añadir DNI, fotos u otros PDFs.`;
                 }
             }
-
-            // Bottom action card for adding or managing attachments
-            const footerCard = document.createElement('div');
-            footerCard.className = 'w-full max-w-xl bg-slate-800/90 hover:bg-slate-800 border border-indigo-500/40 rounded-2xl p-3 text-white shadow-xl cursor-pointer transition flex items-center justify-between gap-3 mt-2 mb-6';
-            footerCard.onclick = () => openModal('modal-attachments');
-            footerCard.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-xl bg-indigo-600/40 border border-indigo-400/40 flex items-center justify-center text-amber-300 shrink-0">
-                        <i class="fa-solid fa-plus text-base"></i>
-                    </div>
-                    <div>
-                        <h4 class="text-xs sm:text-sm font-bold flex items-center gap-1.5">
-                            <span>¿Deseas añadir más páginas, fotos o reordenarlas?</span>
-                        </h4>
-                        <p class="text-[11px] text-slate-300">Tienes ${extraItems.length} anexo(s) con ${totalExtraPages} página(s) listas que se unirán al final del PDF.</p>
-                    </div>
-                </div>
-                <span class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl shrink-0">
-                    Gestionar
-                </span>
-            `;
-            annexContainer.appendChild(footerCard);
         }
 
         function renderOverlays() {
@@ -4081,7 +3913,32 @@
             showToast('DNI de ejemplo cargado');
         }
 
-        function addDniAsAnnexPage() {
+        async function appendPagesToCurrentPdfBytes(newPagesCallback) {
+            const { PDFDocument } = PDFLib;
+            let pdfDoc;
+            if (currentPdfBytes) {
+                pdfDoc = await PDFDocument.load(currentPdfBytes);
+            } else {
+                pdfDoc = await PDFDocument.create();
+            }
+            const prevTotal = pdfDoc.getPageCount();
+            await newPagesCallback(pdfDoc);
+            const newTotal = pdfDoc.getPageCount();
+            currentPdfBytes = await pdfDoc.save();
+            await loadPdfFromBytes(currentPdfBytes);
+            if (newTotal > prevTotal) {
+                currentPage = prevTotal + 1;
+            }
+            await renderAllDocumentPages();
+            setTimeout(() => {
+                const targetEl = document.getElementById(`page-wrapper-${currentPage}`);
+                if (targetEl) {
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 120);
+        }
+
+        async function addDniAsAnnexPage() {
             const isSingle = (dniMode === 'single_sheet' && !!dniDraft.singleDataUrl) || (!dniDraft.frontDataUrl && !dniDraft.backDataUrl && !!dniDraft.singleDataUrl);
 
             if (!isSingle && !dniDraft.frontDataUrl && !dniDraft.backDataUrl) {
@@ -4108,7 +3965,7 @@
                 }
             }
 
-            attachmentsQueue.push({
+            const dniItem = {
                 id: 'annex_dni_' + Date.now(),
                 type: 'dni_pair',
                 isSingleSheet: isSingle,
@@ -4117,7 +3974,7 @@
                 frontDataUrl: isSingle ? null : dniDraft.frontDataUrl,
                 backDataUrl: isSingle ? null : dniDraft.backDataUrl,
                 pageCount: 1
-            });
+            };
 
             // Reset draft
             dniDraft.frontDataUrl = null;
@@ -4125,12 +3982,14 @@
             dniDraft.singleDataUrl = null;
             document.getElementById('dni-title-input').value = '';
             updateDniDraftPreviewUI();
-            if (isCreatedFromImages) {
-                rebuildPdfFromAttachmentsQueue();
-            } else {
-                updateAttachmentsBadgesAndSummary();
-            }
-            showToast('Hoja con DNI añadida al final del PDF');
+
+            // Append directly as editable page onto document
+            await appendPagesToCurrentPdfBytes(async (pdfDoc) => {
+                await renderDniPageOnPdfDoc(pdfDoc, dniItem);
+            });
+            updateAttachmentsBadgesAndSummary();
+            closeModal('modal-attachments');
+            showToast(`✅ DNI añadido como Página ${totalPages}. ¡Toca en ella para escribir o firmar!`, 5500);
         }
 
         function stampDniOnCurrentPage() {
@@ -4204,17 +4063,18 @@
                     </div>
                     ${previewHtml}
                     <button onclick="attachSavedDniToQueue('${doc.id}')" class="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1">
-                        <i class="fa-solid fa-plus"></i> Adjuntar al PDF (1 pág.)
+                        <i class="fa-solid fa-plus"></i> Adjuntar al documento (Página ${totalPages + 1})
                     </button>
                 `;
                 list.appendChild(card);
             });
         }
 
-        function attachSavedDniToQueue(id) {
+        async function attachSavedDniToQueue(id) {
             const doc = savedDniDocs.find(d => d.id === id);
             if (!doc) return;
-            attachmentsQueue.push({
+            showToast(`Añadiendo DNI "${doc.title}" al documento...`);
+            const dniItem = {
                 id: 'annex_dni_' + Date.now(),
                 type: 'dni_pair',
                 isSingleSheet: !!doc.isSingleSheet,
@@ -4223,13 +4083,13 @@
                 frontDataUrl: doc.frontDataUrl || null,
                 backDataUrl: doc.backDataUrl || null,
                 pageCount: 1
+            };
+            await appendPagesToCurrentPdfBytes(async (pdfDoc) => {
+                await renderDniPageOnPdfDoc(pdfDoc, dniItem);
             });
-            if (isCreatedFromImages) {
-                rebuildPdfFromAttachmentsQueue();
-            } else {
-                updateAttachmentsBadgesAndSummary();
-            }
-            showToast(`"${doc.title}" añadido a la cola de anexos`);
+            updateAttachmentsBadgesAndSummary();
+            closeModal('modal-attachments');
+            showToast(`✅ DNI añadido como Página ${totalPages}. ¡Toca en ella para escribir o firmar!`, 5500);
         }
 
         function deleteSavedDniDoc(id) {
@@ -4243,27 +4103,32 @@
             const files = Array.from(event.target.files || []);
             if (!files.length) return;
 
-            for (const file of files) {
-                try {
-                    const dataUrl = await compressAndNormalizeImage(file, 1200, 0.84);
-                    attachmentsQueue.push({
-                        id: 'annex_img_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-                        type: 'image_page',
-                        title: file.name.replace(/\.[^/.]+$/, ''),
-                        imageDataUrl: dataUrl,
-                        pageCount: 1
-                    });
-                } catch (e) {
-                    console.error(e);
-                }
-            }
-            event.target.value = '';
-            if (isCreatedFromImages) {
-                await rebuildPdfFromAttachmentsQueue();
-            } else {
+            showToast(`Añadiendo ${files.length} foto(s) como páginas editables...`);
+            const startP = totalPages + 1;
+            try {
+                await appendPagesToCurrentPdfBytes(async (pdfDoc) => {
+                    const a4W = 595.28, a4H = 841.89;
+                    for (const file of files) {
+                        const dataUrl = await compressAndNormalizeImage(file, 1600, 0.90);
+                        const embedded = await embedDataUrlImage(pdfDoc, dataUrl);
+                        const page = pdfDoc.addPage([a4W, a4H]);
+                        const dims = embedded.scaleToFit(a4W - 40, a4H - 40);
+                        page.drawImage(embedded, {
+                            x: (a4W - dims.width) / 2,
+                            y: (a4H - dims.height) / 2,
+                            width: dims.width,
+                            height: dims.height
+                        });
+                    }
+                });
+                event.target.value = '';
                 updateAttachmentsBadgesAndSummary();
+                closeModal('modal-attachments');
+                showToast(`✅ ${files.length} foto(s) añadida(s) (Pág. ${startP} a ${totalPages}). ¡Toca cualquier página para escribir!`, 6000);
+            } catch (err) {
+                console.error('Error al anexar fotos:', err);
+                showToast('Error al añadir las imágenes al documento');
             }
-            showToast(`${files.length} imagen(es) añadida(s) como anexo`);
         }
 
         // Attach external PDFs (Partida de bautismo, etc.)
@@ -4271,69 +4136,72 @@
             const files = Array.from(event.target.files || []);
             if (!files.length) return;
 
+            showToast(`Uniendo ${files.length} archivo(s) PDF al documento...`);
             const { PDFDocument } = PDFLib;
-            for (const file of files) {
-                try {
-                    const ab = await file.arrayBuffer();
-                    const uint8 = new Uint8Array(ab);
-                    const extDoc = await PDFDocument.load(uint8);
-                    const numPages = extDoc.getPageCount();
-
-                    attachmentsQueue.push({
-                        id: 'annex_pdf_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-                        type: 'external_pdf',
-                        title: file.name,
-                        pdfBytes: uint8,
-                        pageCount: numPages
-                    });
-                } catch (e) {
-                    console.error('Error loading external PDF:', e);
-                    showToast('No se pudo leer el PDF adjunto: ' + file.name);
-                }
-            }
-            event.target.value = '';
-            if (isCreatedFromImages) {
-                await rebuildPdfFromAttachmentsQueue();
-            } else {
+            let addedCount = 0;
+            const startP = totalPages + 1;
+            try {
+                await appendPagesToCurrentPdfBytes(async (pdfDoc) => {
+                    for (const file of files) {
+                        try {
+                            const ab = await file.arrayBuffer();
+                            const extDoc = await PDFDocument.load(new Uint8Array(ab));
+                            const copied = await pdfDoc.copyPages(extDoc, extDoc.getPageIndices());
+                            copied.forEach(p => {
+                                pdfDoc.addPage(p);
+                                addedCount++;
+                            });
+                        } catch (errExt) {
+                            console.error('Error al unir PDF adjunto:', errExt);
+                            showToast(`No se pudo leer el PDF: ${file.name}`);
+                        }
+                    }
+                });
+                event.target.value = '';
                 updateAttachmentsBadgesAndSummary();
+                closeModal('modal-attachments');
+                showToast(`✅ ${addedCount} página(s) unidas (Pág. ${startP} a ${totalPages}). ¡Todas son editables!`, 6000);
+            } catch (err) {
+                console.error('Error uniendo PDFs:', err);
+                showToast('Error al unir los archivos PDF');
             }
-            showToast('Archivo PDF añadido a los anexos');
         }
 
-        // NEW: Attach external Word (.docx / .doc) files into the Attachments Queue (auto-converted to A4 PDF pages)
+        // NEW: Attach external Word (.docx / .doc) files into the document (auto-converted to A4 PDF pages)
         async function handleAttachExternalWordDocs(event) {
             const files = Array.from(event.target.files || []);
             if (!files.length) return;
 
+            showToast(`Convirtiendo y uniendo ${files.length} documento(s) Word...`);
             const { PDFDocument } = PDFLib;
-            for (const file of files) {
-                try {
-                    showToast('Convirtiendo anexo Word "' + file.name + '" a PDF...');
-                    const html = await extractHtmlFromWordFile(file);
-                    const convertedBytes = await convertWordHtmlToPdfBytes(html);
-                    const extDoc = await PDFDocument.load(convertedBytes);
-                    const numPages = extDoc.getPageCount();
-
-                    attachmentsQueue.push({
-                        id: 'annex_word_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-                        type: 'external_pdf',
-                        isFromWord: true,
-                        title: file.name + ' (Word convertido a PDF)',
-                        pdfBytes: convertedBytes,
-                        pageCount: numPages
-                    });
-                } catch (e) {
-                    console.error('Error converting attached Word file:', e);
-                    showToast('No se pudo convertir el Word adjunto: ' + file.name);
-                }
-            }
-            event.target.value = '';
-            if (isCreatedFromImages) {
-                await rebuildPdfFromAttachmentsQueue();
-            } else {
+            let addedCount = 0;
+            const startP = totalPages + 1;
+            try {
+                await appendPagesToCurrentPdfBytes(async (pdfDoc) => {
+                    for (const file of files) {
+                        try {
+                            const html = await extractHtmlFromWordFile(file);
+                            const convertedBytes = await convertWordHtmlToPdfBytes(html);
+                            const doc = await PDFDocument.load(convertedBytes);
+                            const copied = await pdfDoc.copyPages(doc, doc.getPageIndices());
+                            copied.forEach(p => {
+                                pdfDoc.addPage(p);
+                                addedCount++;
+                            });
+                        } catch (errW) {
+                            console.error('Error al anexar Word:', errW);
+                            showToast(`No se pudo procesar: ${file.name}`);
+                        }
+                    }
+                });
+                event.target.value = '';
                 updateAttachmentsBadgesAndSummary();
+                closeModal('modal-attachments');
+                showToast(`✅ Word añadido como ${addedCount} página(s) editables (Pág. ${startP} a ${totalPages}).`, 6000);
+            } catch (err) {
+                console.error('Error uniendo Word:', err);
+                showToast('Error al procesar el archivo Word');
             }
-            showToast('Documento(s) Word añadido(s) como páginas PDF anexas');
         }
 
         function moveAttachmentInQueue(index, delta) {
@@ -4744,12 +4612,8 @@
 
                 // Show clear summary modal with WhatsApp/Email share option
                 closeModal('modal-attachments');
-                document.getElementById('export-summary-breakdown').textContent = isCreatedFromImages
-                    ? `Documento final de ${finalPageCount} página(s) generado a partir de tus fotos.`
-                    : `Documento final de ${finalPageCount} página(s): Formulario (${totalPages} pág.) + Anexos (${extraPagesCount} pág.).`;
-                document.getElementById('export-summary-annex-line').innerHTML = isCreatedFromImages
-                    ? `<i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> ${attachmentsQueue.length} foto(s) ordenadas y maquetadas en PDF.`
-                    : `<i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> ${attachmentsQueue.length} anexo(s) unido(s) al final del mismo PDF.`;
+                document.getElementById('export-summary-breakdown').textContent = `Documento final de ${finalPageCount} página(s) unidas con todos tus textos, firmas y parches Tipp-Ex.`;
+                document.getElementById('export-summary-annex-line').innerHTML = `<i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> ${finalPageCount} página(s) integradas en un solo PDF interactivo.`;
 
                 openModal('modal-export-ready');
             } catch (err) {
