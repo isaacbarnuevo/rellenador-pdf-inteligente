@@ -59,6 +59,47 @@
             z-index: 30;
         }
 
+        .overlay-item.type-whiteout.selected {
+            outline: 2px dashed #e11d48;
+            outline-offset: 2px;
+            background-color: #ffffff;
+        }
+
+        /* Tipp-Ex touch / mouse resize handles */
+        .tippex-handle {
+            position: absolute;
+            background: #e11d48;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            z-index: 50;
+            touch-action: none;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+        }
+        .tippex-handle-e {
+            width: 16px;
+            height: 16px;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: ew-resize;
+        }
+        .tippex-handle-s {
+            width: 16px;
+            height: 16px;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            cursor: ns-resize;
+        }
+        .tippex-handle-se {
+            width: 18px;
+            height: 18px;
+            right: -9px;
+            bottom: -9px;
+            cursor: nwse-resize;
+            background: #2563eb;
+        }
+
         /* Target crosshairs when user taps on PDF */
         #tap-indicator {
             pointer-events: none;
@@ -213,21 +254,41 @@
     <!-- CONTEXTUAL FLOATING BAR FOR SELECTED ELEMENT (ZERO CUT-OFF FINE TUNING) -->
     <div id="selection-toolbar" class="hidden bg-blue-950/95 backdrop-blur-md text-white px-3 py-2 border-b border-blue-700/60 shadow-xl shrink-0 z-30 transition-all">
         <div class="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-2">
-            <!-- Size Control (Critical for preventing cut-offs) -->
-            <div class="flex items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
+            <!-- Text & Signature Size Control -->
+            <div id="general-size-controls" class="flex items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
                 <span class="text-[11px] text-blue-300 mr-1 font-medium">Tamaño:</span>
-                <button onclick="resizeSelected(-1)" class="w-8 h-7 rounded bg-blue-700 hover:bg-blue-600 active:scale-95 flex items-center justify-center font-bold text-sm" title="Reducir para que quepa entero">
+                <button onclick="resizeSelected(-1)" class="w-8 h-7 rounded bg-blue-700 hover:bg-blue-600 active:scale-95 flex items-center justify-center font-bold text-sm" title="Reducir">
                     <i class="fa-solid fa-minus"></i>
                 </button>
                 <span id="selected-size-label" class="font-mono text-xs px-2 min-w-[42px] text-center font-semibold text-amber-300">13px</span>
-                <button onclick="resizeSelected(1)" class="w-8 h-7 rounded bg-blue-700 hover:bg-blue-600 active:scale-95 flex items-center justify-center font-bold text-sm" title="Aumentar tamaño">
+                <button onclick="resizeSelected(1)" class="w-8 h-7 rounded bg-blue-700 hover:bg-blue-600 active:scale-95 flex items-center justify-center font-bold text-sm" title="Aumentar">
                     <i class="fa-solid fa-plus"></i>
                 </button>
             </div>
 
+            <!-- Tipp-Ex Custom Width / Height Controls & Presets -->
+            <div id="whiteout-size-controls" class="hidden items-center gap-1.5 flex-wrap">
+                <div class="flex items-center gap-1 bg-rose-950/90 px-2 py-1 rounded-lg border border-rose-700/60 text-xs">
+                    <span class="text-rose-300 font-bold flex items-center gap-1 mr-1"><i class="fa-solid fa-eraser"></i> Tipp-Ex</span>
+                    <button onclick="setTippExPreset('word')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 active:bg-rose-700 text-[11px] font-semibold text-slate-200" title="Tamaño 1 palabra">Palabra</button>
+                    <button onclick="setTippExPreset('medium')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 active:bg-rose-700 text-[11px] font-semibold text-slate-200" title="Tamaño medio renglón">Medio</button>
+                    <button onclick="setTippExPreset('full_line')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 active:bg-rose-700 text-[11px] font-semibold text-slate-200" title="Tamaño línea entera">Línea</button>
+                </div>
+
+                <!-- Fine Dimensions +/- -->
+                <div class="flex items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-700 text-xs">
+                    <span class="text-slate-400 text-[11px]">Ancho:</span>
+                    <button onclick="resizeSelectedDimension('width', -1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Reducir ancho">-</button>
+                    <button onclick="resizeSelectedDimension('width', 1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Aumentar ancho">+</button>
+                    <span class="text-slate-400 text-[11px] ml-1">Alto:</span>
+                    <button onclick="resizeSelectedDimension('height', -1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Reducir grosor (más fino)">-</button>
+                    <button onclick="resizeSelectedDimension('height', 1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Aumentar grosor">+</button>
+                </div>
+            </div>
+
             <!-- Fine 1px Nudge Arrows -->
             <div class="flex items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
-                <span class="text-[11px] text-blue-300 mr-1 hidden sm:inline">Ajuste fino:</span>
+                <span class="text-[11px] text-blue-300 mr-1 hidden sm:inline">Mover:</span>
                 <button onclick="nudgeSelected(-1.5, 0)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:bg-blue-600 flex items-center justify-center">
                     <i class="fa-solid fa-arrow-left text-xs"></i>
                 </button>
@@ -242,24 +303,6 @@
                 </button>
             </div>
 
-            <!-- Tipp-Ex Custom Width / Height Controls -->
-            <div id="whiteout-size-controls" class="hidden items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
-                <span class="text-[11px] text-rose-300 mr-1 font-medium">Ancho:</span>
-                <button onclick="resizeSelectedDimension('width', -1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Reducir ancho">
-                    <i class="fa-solid fa-arrows-left-right-to-line"></i>
-                </button>
-                <button onclick="resizeSelectedDimension('width', 1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Aumentar ancho">
-                    <i class="fa-solid fa-arrows-left-right"></i>
-                </button>
-                <span class="text-[11px] text-rose-300 mx-1 font-medium">Alto:</span>
-                <button onclick="resizeSelectedDimension('height', -1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Reducir alto">
-                    <i class="fa-solid fa-arrows-up-down-to-line"></i>
-                </button>
-                <button onclick="resizeSelectedDimension('height', 1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Aumentar alto">
-                    <i class="fa-solid fa-arrows-up-down"></i>
-                </button>
-            </div>
-
             <!-- Ink & Tipp-Ex Color & Actions -->
             <div class="flex items-center gap-1.5">
                 <div id="text-color-controls" class="flex items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
@@ -271,7 +314,7 @@
                 <div id="whiteout-color-controls" class="hidden items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
                     <button onclick="setSelectedColor('#ffffff')" class="w-5 h-5 rounded bg-white border-2 border-slate-400" title="Blanco puro"></button>
                     <button onclick="setSelectedColor('#f8fafc')" class="w-5 h-5 rounded bg-slate-100 border-2 border-slate-300" title="Blanco papel"></button>
-                    <button onclick="setSelectedColor('#fef3c7')" class="w-5 h-5 rounded bg-amber-100 border-2 border-amber-300" title="Marfil / Papel antiguo"></button>
+                    <button onclick="setSelectedColor('#fdfbf7')" class="w-5 h-5 rounded bg-amber-50 border-2 border-amber-300" title="Marfil / Papel antiguo"></button>
                 </div>
 
                 <button id="btn-edit-selected" onclick="openEditSelectedModal()" class="px-2.5 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-medium flex items-center gap-1">
@@ -333,14 +376,15 @@
         </div>
     </main>
 
-    <!-- BOTTOM SMART DOCK: QUICK SAVED CHIPS & 4 PRIMARY ACTION BUTTONS -->
+    <!-- BOTTOM SMART DOCK: QUICK SAVED CHIPS & 5 PRIMARY ACTION BUTTONS (DIRECT ACCESS FROM MOBILE) -->
     <footer class="bg-slate-900 border-t border-slate-800 text-white shrink-0 z-40 shadow-2xl">
         <!-- Quick Saved Data Horizontal Strip -->
-        <div class="px-3 py-2 bg-slate-950/70 border-b border-slate-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
-            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1">
-                <i class="fa-solid fa-bolt text-amber-400"></i> Rápido:
-            </span>
-            <!-- Quick Checkmark & Today's Date -->
+        <div class="px-3 py-1.5 bg-slate-950/80 border-b border-slate-800/80 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            <!-- Tipp-Ex first for instant mobile access without having to scroll -->
+            <button onclick="insertTippEx()" class="shrink-0 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1 shadow-md" title="Tapar texto antiguo con parche blanco">
+                <i class="fa-solid fa-eraser"></i> Tipp-Ex (Tapar)
+            </button>
+            <span class="text-[10px] font-semibold text-slate-500 shrink-0">|</span>
             <button onclick="insertQuickText('✓', 16)" class="shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-emerald-400 border border-slate-700 px-2.5 py-1 rounded-full text-xs font-bold transition">
                 ✓ Marca
             </button>
@@ -350,43 +394,45 @@
             <button onclick="insertTodayDate()" class="shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-amber-300 border border-slate-700 px-2.5 py-1 rounded-full text-xs font-medium transition flex items-center gap-1">
                 <i class="fa-regular fa-calendar"></i> Fecha Hoy
             </button>
-            <button onclick="insertTippEx()" class="shrink-0 bg-slate-800 hover:bg-rose-950/60 active:scale-95 text-rose-300 border border-slate-700 hover:border-rose-500/60 px-2.5 py-1 rounded-full text-xs font-semibold transition flex items-center gap-1" title="Tapar texto antiguo con un parche blanco (ideal para corregir PDFs ya impresos)">
-                <i class="fa-solid fa-eraser text-rose-400"></i> Tipp-Ex (Tapar texto)
-            </button>
 
             <!-- Dynamic Saved Chips rendered via JS -->
             <div id="quick-chips-strip" class="flex items-center gap-1.5"></div>
         </div>
 
-        <!-- Primary Mobile Action Buttons (Now 4 columns including Anexos / DNI) -->
-        <div class="grid grid-cols-4 gap-1.5 sm:gap-2 p-2 max-w-3xl mx-auto">
-            <button onclick="openAddTextModal()" class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 shadow-md">
-                <i class="fa-solid fa-font text-sm"></i>
-                <span>Añadir Texto</span>
+        <!-- Primary Action Buttons (Now 5 columns including Tipp-Ex for 1-tap mobile access) -->
+        <div class="grid grid-cols-5 gap-1 sm:gap-2 p-1.5 sm:p-2 max-w-3xl mx-auto">
+            <button onclick="openAddTextModal()" class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white py-2 px-1 rounded-xl font-semibold text-[10px] sm:text-xs flex flex-col items-center justify-center gap-1 shadow-md transition">
+                <i class="fa-solid fa-font text-xs sm:text-sm"></i>
+                <span class="truncate">Texto</span>
             </button>
 
-            <button onclick="openModal('modal-saved-data')" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-100 border border-slate-700 py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5">
-                <div class="flex items-center gap-1">
-                    <i class="fa-solid fa-bookmark text-amber-400 text-sm"></i>
-                    <span id="saved-count-badge" class="bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
-                </div>
-                <span>Mis Datos</span>
+            <button onclick="insertTippEx()" class="bg-rose-950/90 hover:bg-rose-900 active:bg-rose-800 text-rose-200 border border-rose-500/60 py-2 px-1 rounded-xl font-semibold text-[10px] sm:text-xs flex flex-col items-center justify-center gap-1 shadow-md transition" title="Tapar texto antiguo con parche blanco">
+                <i class="fa-solid fa-eraser text-rose-400 text-xs sm:text-sm"></i>
+                <span class="truncate font-bold text-rose-300">Tipp-Ex</span>
             </button>
 
-            <button onclick="openSignaturesModal()" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-100 border border-slate-700 py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5">
+            <button onclick="openModal('modal-saved-data')" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-100 border border-slate-700 py-2 px-1 rounded-xl font-semibold text-[10px] sm:text-xs flex flex-col items-center justify-center gap-1 transition">
                 <div class="flex items-center gap-1">
-                    <i class="fa-solid fa-signature text-emerald-400 text-sm"></i>
-                    <span id="sig-count-badge" class="bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+                    <i class="fa-solid fa-bookmark text-amber-400 text-xs sm:text-sm"></i>
+                    <span id="saved-count-badge" class="bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded-full text-[9px]">0</span>
                 </div>
-                <span>Mis Firmas</span>
+                <span class="truncate">Mis Datos</span>
             </button>
 
-            <button onclick="openModal('modal-attachments')" class="bg-indigo-950/90 hover:bg-indigo-900 active:bg-indigo-800 text-indigo-100 border border-indigo-500/50 py-2 px-2 rounded-xl font-semibold text-[11px] sm:text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 shadow-md">
+            <button onclick="openSignaturesModal()" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-100 border border-slate-700 py-2 px-1 rounded-xl font-semibold text-[10px] sm:text-xs flex flex-col items-center justify-center gap-1 transition">
                 <div class="flex items-center gap-1">
-                    <i class="fa-solid fa-id-card text-amber-300 text-sm"></i>
-                    <span id="annex-count-badge" class="bg-amber-400 text-slate-950 font-bold px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+                    <i class="fa-solid fa-signature text-emerald-400 text-xs sm:text-sm"></i>
+                    <span id="sig-count-badge" class="bg-emerald-500/20 text-emerald-300 px-1 py-0.2 rounded-full text-[9px]">0</span>
                 </div>
-                <span>Anexos / DNI</span>
+                <span class="truncate">Firmas</span>
+            </button>
+
+            <button onclick="openModal('modal-attachments')" class="bg-indigo-950/90 hover:bg-indigo-900 active:bg-indigo-800 text-indigo-100 border border-indigo-500/50 py-2 px-1 rounded-xl font-semibold text-[10px] sm:text-xs flex flex-col items-center justify-center gap-1 shadow-md transition">
+                <div class="flex items-center gap-1">
+                    <i class="fa-solid fa-id-card text-amber-300 text-xs sm:text-sm"></i>
+                    <span id="annex-count-badge" class="bg-amber-400 text-slate-950 font-bold px-1 py-0.2 rounded-full text-[9px]">0</span>
+                </div>
+                <span class="truncate">Anexos</span>
             </button>
         </div>
     </footer>
@@ -406,6 +452,17 @@
             </div>
 
             <div class="p-4 space-y-4">
+                <!-- Tipp-Ex Shortcut in Text Modal -->
+                <div class="bg-rose-50 border border-rose-200 rounded-xl p-2.5 flex items-center justify-between text-xs text-rose-900">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                        <i class="fa-solid fa-eraser text-rose-600 shrink-0"></i>
+                        <span class="truncate">¿Quieres tapar o borrar texto antiguo del PDF?</span>
+                    </div>
+                    <button type="button" onclick="closeModal('modal-add-text'); insertTippEx();" class="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] shrink-0 shadow-sm ml-2">
+                        Usar Tipp-Ex
+                    </button>
+                </div>
+
                 <div>
                     <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Texto completo (sin límite de espacio)</label>
                     <input type="text" id="input-text-value" placeholder="Ej: Calle Toledo 24, 1ª escalera, 2º derecha" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddOrEditText();}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 outline-none text-base font-medium text-slate-900">
@@ -2110,7 +2167,7 @@
             pageItems.forEach(item => {
                 const el = document.createElement('div');
                 el.dataset.id = item.id;
-                el.className = 'overlay-item' + (item.id === selectedElementId ? ' selected' : '');
+                el.className = 'overlay-item' + (item.type === 'whiteout' ? ' type-whiteout' : '') + (item.id === selectedElementId ? ' selected' : '');
                 el.style.left = (item.xRatio * stageWidth) + 'px';
                 el.style.top = (item.yRatio * stageHeight) + 'px';
 
@@ -2131,15 +2188,36 @@
                     img.className = 'w-full h-full object-contain pointer-events-none select-none';
                     el.appendChild(img);
                 } else if (item.type === 'whiteout') {
-                    const w = (item.widthRatio || 0.22) * stageWidth;
-                    const h = (item.heightRatio || 0.038) * stageHeight;
+                    const w = (item.widthRatio || 0.12) * stageWidth;
+                    const h = (item.heightRatio || 0.018) * stageHeight;
                     el.style.width = w + 'px';
                     el.style.height = h + 'px';
                     el.style.backgroundColor = item.color || '#ffffff';
-                    el.style.boxShadow = '0 0 0 1px rgba(203, 213, 225, 0.8) inset';
+                    el.style.boxShadow = item.id === selectedElementId ? 'none' : '0 0 0 1px rgba(203, 213, 225, 0.9) inset';
                     el.style.borderRadius = '2px';
                     el.style.zIndex = '15';
-                    el.title = 'Tipp-Ex (Tapa texto). Arrastra para mover o usa los controles arriba';
+                    el.title = 'Tipp-Ex (Tapa texto). Arrastra los tiradores para ensanchar o afinar';
+
+                    // When selected, attach direct visual drag handles for touch & mouse
+                    if (item.id === selectedElementId) {
+                        const handleE = document.createElement('div');
+                        handleE.className = 'tippex-handle tippex-handle-e';
+                        handleE.title = 'Arrastra para ensanchar';
+                        attachTippExResizeHandle(handleE, item, 'e');
+                        el.appendChild(handleE);
+
+                        const handleS = document.createElement('div');
+                        handleS.className = 'tippex-handle tippex-handle-s';
+                        handleS.title = 'Arrastra para ajustar alto';
+                        attachTippExResizeHandle(handleS, item, 's');
+                        el.appendChild(handleS);
+
+                        const handleSE = document.createElement('div');
+                        handleSE.className = 'tippex-handle tippex-handle-se';
+                        handleSE.title = 'Arrastra para cambiar tamaño';
+                        attachTippExResizeHandle(handleSE, item, 'se');
+                        el.appendChild(handleSE);
+                    }
                 }
 
                 // Make draggable via Mouse & Touch with Pointer Events
@@ -2151,12 +2229,67 @@
             scheduleAutoSave();
         }
 
+        function attachTippExResizeHandle(handleNode, item, direction) {
+            handleNode.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                if (e.button !== undefined && e.button !== 0) return;
+
+                const stageWidth = baseViewportWidth * currentZoom;
+                const stageHeight = baseViewportHeight * currentZoom;
+                const startPointerX = e.clientX;
+                const startPointerY = e.clientY;
+                const startWidth = (item.widthRatio || 0.12) * stageWidth;
+                const startHeight = (item.heightRatio || 0.018) * stageHeight;
+                const layer = document.getElementById('overlay-layer');
+                const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
+
+                if (handleNode.setPointerCapture) {
+                    try { handleNode.setPointerCapture(e.pointerId); } catch (_) {}
+                }
+
+                const onPointerMove = (me) => {
+                    if (me.cancelable) me.preventDefault();
+                    const dx = me.clientX - startPointerX;
+                    const dy = me.clientY - startPointerY;
+
+                    const curW = baseViewportWidth * currentZoom;
+                    const curH = baseViewportHeight * currentZoom;
+
+                    if (direction === 'e' || direction === 'se') {
+                        const newW = Math.max(12, Math.min(curW - (item.xRatio * curW), startWidth + dx));
+                        item.widthRatio = newW / curW;
+                        if (domNode) domNode.style.width = newW + 'px';
+                    }
+                    if (direction === 's' || direction === 'se') {
+                        const newH = Math.max(6, Math.min(curH - (item.yRatio * curH), startHeight + dy));
+                        item.heightRatio = newH / curH;
+                        if (domNode) domNode.style.height = newH + 'px';
+                    }
+                };
+
+                const onPointerUp = (ue) => {
+                    if (handleNode.releasePointerCapture) {
+                        try { handleNode.releasePointerCapture(ue.pointerId); } catch (_) {}
+                    }
+                    window.removeEventListener('pointermove', onPointerMove);
+                    window.removeEventListener('pointerup', onPointerUp);
+                    window.removeEventListener('pointercancel', onPointerUp);
+                    scheduleAutoSave();
+                };
+
+                window.addEventListener('pointermove', onPointerMove);
+                window.addEventListener('pointerup', onPointerUp);
+                window.addEventListener('pointercancel', onPointerUp);
+            });
+        }
+
         function attachDragBehavior(domNode, item) {
             let startPointerX = 0, startPointerY = 0;
             let startLeft = 0, startTop = 0;
             let isDragging = false;
 
             const onPointerDown = (e) => {
+                if (e.target.classList.contains('tippex-handle')) return;
                 if (e.button !== undefined && e.button !== 0) return;
                 e.stopPropagation();
 
@@ -2270,6 +2403,7 @@
             }
             toolbar.classList.remove('hidden');
 
+            const generalSizeControls = document.getElementById('general-size-controls');
             const sizeLabel = document.getElementById('selected-size-label');
             const colorControls = document.getElementById('text-color-controls');
             const whiteoutSizeControls = document.getElementById('whiteout-size-controls');
@@ -2277,21 +2411,22 @@
             const editBtn = document.getElementById('btn-edit-selected');
 
             if (item.type === 'text') {
-                sizeLabel.textContent = `${item.fontSize}px`;
+                if (generalSizeControls) generalSizeControls.classList.remove('hidden');
+                if (sizeLabel) sizeLabel.textContent = `${item.fontSize}px`;
                 if (colorControls) colorControls.classList.remove('hidden');
                 if (editBtn) editBtn.classList.remove('hidden');
                 if (whiteoutSizeControls) whiteoutSizeControls.classList.add('hidden');
                 if (whiteoutColorControls) whiteoutColorControls.classList.add('hidden');
             } else if (item.type === 'whiteout') {
-                const pct = Math.round(((item.widthRatio || 0.22) / 0.22) * 100);
-                sizeLabel.textContent = `${pct}%`;
+                if (generalSizeControls) generalSizeControls.classList.add('hidden');
                 if (colorControls) colorControls.classList.add('hidden');
                 if (editBtn) editBtn.classList.add('hidden');
                 if (whiteoutSizeControls) whiteoutSizeControls.classList.remove('hidden');
                 if (whiteoutColorControls) whiteoutColorControls.classList.remove('hidden');
             } else {
+                if (generalSizeControls) generalSizeControls.classList.remove('hidden');
                 const pct = Math.round((item.widthRatio / 0.24) * 100);
-                sizeLabel.textContent = `${pct}%`;
+                if (sizeLabel) sizeLabel.textContent = `${pct}%`;
                 if (colorControls) colorControls.classList.add('hidden');
                 if (editBtn) editBtn.classList.add('hidden');
                 if (whiteoutSizeControls) whiteoutSizeControls.classList.add('hidden');
@@ -2318,13 +2453,11 @@
             } else if (item.type === 'whiteout') {
                 const factor = delta > 0 ? 1.15 : 0.87;
                 item.widthRatio = Math.max(0.02, Math.min(0.98, item.widthRatio * factor));
-                item.heightRatio = Math.max(0.015, Math.min(0.70, item.heightRatio * factor));
+                item.heightRatio = Math.max(0.008, Math.min(0.50, item.heightRatio * factor));
                 if (domNode) {
                     domNode.style.width = (item.widthRatio * stageWidth) + 'px';
                     domNode.style.height = (item.heightRatio * stageHeight) + 'px';
                 }
-                const label = document.getElementById('selected-size-label');
-                if (label) label.textContent = `${Math.round((item.widthRatio / 0.22) * 100)}%`;
             } else if (item.type === 'signature' || item.type === 'image') {
                 const factor = delta > 0 ? 1.08 : 0.92;
                 item.widthRatio = Math.max(0.06, Math.min(0.85, item.widthRatio * factor));
@@ -2339,6 +2472,34 @@
             scheduleAutoSave();
         }
 
+        function setTippExPreset(preset) {
+            const item = getSelectedElement();
+            if (!item || item.type !== 'whiteout') return;
+            const stageWidth = baseViewportWidth * currentZoom;
+            const stageHeight = baseViewportHeight * currentZoom;
+            const layer = document.getElementById('overlay-layer');
+            const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
+
+            if (preset === 'word') {
+                item.widthRatio = 0.12;
+                item.heightRatio = 0.018; // ~15px
+            } else if (preset === 'medium') {
+                item.widthRatio = 0.28;
+                item.heightRatio = 0.018;
+            } else if (preset === 'full_line') {
+                item.widthRatio = 0.58;
+                item.heightRatio = 0.018;
+            }
+            if (domNode) {
+                domNode.style.width = (item.widthRatio * stageWidth) + 'px';
+                domNode.style.height = (item.heightRatio * stageHeight) + 'px';
+            }
+            renderOverlays();
+            selectElement(item.id);
+            scheduleAutoSave();
+            showToast('Tamaño Tipp-Ex ajustado');
+        }
+
         function resizeSelectedDimension(dim, delta) {
             const item = getSelectedElement();
             if (!item || item.type !== 'whiteout') return;
@@ -2349,16 +2510,14 @@
             const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
 
             if (dim === 'width') {
-                const factor = delta > 0 ? 1.18 : 0.85;
-                item.widthRatio = Math.max(0.02, Math.min(0.98, item.widthRatio * factor));
+                const stepRatio = 14 / stageWidth;
+                item.widthRatio = Math.max(0.015, Math.min(0.98, item.widthRatio + (delta * stepRatio)));
                 if (domNode) domNode.style.width = (item.widthRatio * stageWidth) + 'px';
             } else if (dim === 'height') {
-                const factor = delta > 0 ? 1.25 : 0.80;
-                item.heightRatio = Math.max(0.01, Math.min(0.80, item.heightRatio * factor));
+                const stepRatio = 2.5 / stageHeight;
+                item.heightRatio = Math.max(0.006, Math.min(0.50, item.heightRatio + (delta * stepRatio)));
                 if (domNode) domNode.style.height = (item.heightRatio * stageHeight) + 'px';
             }
-            const label = document.getElementById('selected-size-label');
-            if (label) label.textContent = `${Math.round((item.widthRatio / 0.22) * 100)}%`;
             scheduleAutoSave();
         }
 
@@ -3759,8 +3918,8 @@
         // ============================================================================
         function insertTippEx() {
             const newId = 'whiteout_' + Date.now();
-            const wRatio = 0.22;
-            const hRatio = 0.038;
+            const wRatio = 0.13; // Ancho inicial ajustado (~75px en A4)
+            const hRatio = 0.018; // Alto calibrado a exactamente 1 línea de texto (~15px en A4)
             const x = Math.max(0.005, Math.min(0.98 - wRatio, lastTapPosition.xRatio - 0.02));
             const y = Math.max(0.005, Math.min(0.98 - hRatio, lastTapPosition.yRatio - (hRatio * 0.5)));
 
@@ -3776,7 +3935,7 @@
             });
             renderOverlays();
             selectElement(newId);
-            showToast('Parche Tipp-Ex colocado. Muévelo sobre el texto antiguo para taparlo');
+            showToast('Tipp-Ex colocado (1 línea). Usa los tiradores de las esquinas o la barra para ajustar');
         }
 
         // ============================================================================
