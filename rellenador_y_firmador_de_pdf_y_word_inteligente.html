@@ -2434,12 +2434,19 @@
             showToast('¡Word (.docx) convertido a PDF y rellenado! También puedes pulsar "Editar texto Word" arriba');
         }
 
-        async function loadPdfFromBytes(bytes) {
+        async function loadPdfFromBytes(bytes, targetPage = null) {
             currentPdfBytes = bytes;
+            if (pdfJsDoc) {
+                try { await pdfJsDoc.destroy(); } catch (_) {}
+            }
             const loadingTask = pdfjsLib.getDocument({ data: bytes.slice(0) });
             pdfJsDoc = await loadingTask.promise;
             totalPages = pdfJsDoc.numPages;
-            currentPage = 1;
+            if (targetPage !== null && targetPage >= 1 && targetPage <= totalPages) {
+                currentPage = targetPage;
+            } else if (!currentPage || currentPage > totalPages) {
+                currentPage = 1;
+            }
 
             // Fit width automatically on mobile screens
             const workspaceWidth = document.getElementById('pdf-workspace').clientWidth - 24;
@@ -2487,147 +2494,140 @@
                 const cssWidth = Math.round(baseViewportWidth * currentZoom);
                 const cssHeight = Math.round(baseViewportHeight * currentZoom);
 
-                // Check if stages already exist for all pages and match currentZoom
-                const existingStages = container.querySelectorAll('.pdf-page-stage');
-                const needsStructureRebuild = (existingStages.length !== totalPages) ||
-                    (existingStages[0] && parseInt(existingStages[0].style.width) !== cssWidth);
+                container.innerHTML = '';
+                let draggedDocPageNum = null;
 
-                if (needsStructureRebuild) {
-                    container.innerHTML = '';
-                    let draggedDocPageNum = null;
+                for (let p = 1; p <= totalPages; p++) {
+                    const pageWrapper = document.createElement('div');
+                    pageWrapper.id = `page-wrapper-${p}`;
+                    pageWrapper.dataset.page = p;
+                    pageWrapper.className = 'page-wrapper flex flex-col items-center w-full max-w-full';
 
-                    for (let p = 1; p <= totalPages; p++) {
-                        const pageWrapper = document.createElement('div');
-                        pageWrapper.id = `page-wrapper-${p}`;
-                        pageWrapper.dataset.page = p;
-                        pageWrapper.className = 'page-wrapper flex flex-col items-center w-full max-w-full';
-
-                        pageWrapper.innerHTML = `
-                            <div class="flex items-center justify-between w-full mb-1.5 px-2 text-xs text-slate-400 font-medium" style="max-width: ${cssWidth}px;">
-                                <div class="flex items-center gap-1.5">
-                                    <div class="page-drag-handle cursor-grab active:cursor-grabbing flex items-center gap-1.5 bg-slate-900/95 hover:bg-indigo-950/90 text-slate-200 hover:text-white px-2.5 py-1 rounded-lg border border-slate-700/80 hover:border-indigo-500/70 shadow-sm transition select-none" draggable="true" data-page="${p}" title="Arrastra para reordenar esta página arriba o abajo">
-                                        <i class="fa-solid fa-grip-vertical text-indigo-400 text-xs"></i>
-                                        <span class="w-2 h-2 rounded-full ${p === currentPage ? 'bg-blue-400 ring-2 ring-blue-500/50' : 'bg-slate-500'} inline-block"></span>
-                                        <span class="font-bold text-slate-100">Pág ${p}</span>
-                                        <span class="text-slate-400 font-normal">/ ${totalPages}</span>
-                                    </div>
-                                    <button onclick="event.stopPropagation(); moveDocumentPage(${p}, -1)" ${p === 1 ? 'disabled' : ''} class="w-6 h-6 rounded-lg bg-slate-800/90 hover:bg-slate-700 disabled:opacity-20 text-slate-300 hover:text-white flex items-center justify-center text-[10px] border border-slate-700 transition" title="Subir página (mover antes)">
-                                        <i class="fa-solid fa-arrow-up"></i>
-                                    </button>
-                                    <button onclick="event.stopPropagation(); moveDocumentPage(${p}, 1)" ${p === totalPages ? 'disabled' : ''} class="w-6 h-6 rounded-lg bg-slate-800/90 hover:bg-slate-700 disabled:opacity-20 text-slate-300 hover:text-white flex items-center justify-center text-[10px] border border-slate-700 transition" title="Bajar página (mover después)">
-                                        <i class="fa-solid fa-arrow-down"></i>
-                                    </button>
-                                    ${totalPages > 1 ? `
-                                    <button onclick="event.stopPropagation(); deleteDocumentPage(${p})" class="w-6 h-6 rounded-lg bg-slate-800/90 hover:bg-rose-900/70 text-slate-400 hover:text-rose-300 flex items-center justify-center text-[10px] border border-slate-700 hover:border-rose-500/50 transition ml-0.5" title="Eliminar esta página">
-                                        <i class="fa-solid fa-trash-can"></i>
-                                    </button>
-                                    ` : ''}
+                    pageWrapper.innerHTML = `
+                        <div class="flex items-center justify-between w-full mb-2 px-2 text-xs text-slate-400 font-medium" style="max-width: ${cssWidth}px;">
+                            <div class="flex items-center gap-1.5 sm:gap-2">
+                                <div class="page-drag-handle cursor-grab active:cursor-grabbing flex items-center gap-2 bg-slate-900/95 hover:bg-indigo-950 text-slate-200 hover:text-white px-3 py-1.5 rounded-xl border border-slate-700 hover:border-indigo-500 shadow-md transition select-none" draggable="true" data-page="${p}" title="Arrastra esta página arriba o abajo para cambiar su orden">
+                                    <i class="fa-solid fa-grip-vertical text-indigo-400 text-sm"></i>
+                                    <span class="w-2.5 h-2.5 rounded-full ${p === currentPage ? 'bg-blue-400 ring-2 ring-blue-500/50' : 'bg-slate-500'} inline-block"></span>
+                                    <span class="font-bold text-slate-100 text-xs sm:text-sm">Página ${p}</span>
+                                    <span class="text-slate-400 font-normal text-xs">/ ${totalPages}</span>
                                 </div>
-                                <span class="text-[11px] text-slate-400 hidden sm:inline flex items-center gap-1.5">
-                                    <i class="fa-regular fa-hand-pointer text-amber-400"></i>
-                                    <span>Arrastra para reordenar o toca para escribir</span>
-                                </span>
+                                <button onclick="event.stopPropagation(); moveDocumentPage(${p}, -1)" ${p === 1 ? 'disabled' : ''} class="w-8 h-8 rounded-xl bg-slate-800/95 hover:bg-indigo-600 disabled:opacity-20 text-slate-200 hover:text-white flex items-center justify-center text-xs border border-slate-700 shadow transition active:scale-95" title="Subir página (mover antes)">
+                                    <i class="fa-solid fa-arrow-up"></i>
+                                </button>
+                                <button onclick="event.stopPropagation(); moveDocumentPage(${p}, 1)" ${p === totalPages ? 'disabled' : ''} class="w-8 h-8 rounded-xl bg-slate-800/95 hover:bg-indigo-600 disabled:opacity-20 text-slate-200 hover:text-white flex items-center justify-center text-xs border border-slate-700 shadow transition active:scale-95" title="Bajar página (mover después)">
+                                    <i class="fa-solid fa-arrow-down"></i>
+                                </button>
+                                ${totalPages > 1 ? `
+                                <button onclick="event.stopPropagation(); deleteDocumentPage(${p})" class="w-8 h-8 rounded-xl bg-slate-800/95 hover:bg-rose-900/80 text-slate-400 hover:text-rose-300 flex items-center justify-center text-xs border border-slate-700 hover:border-rose-500/60 shadow transition active:scale-95 ml-1" title="Eliminar esta página">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                                ` : ''}
                             </div>
-                            <div id="pdf-stage-${p}" class="pdf-page-stage relative shadow-2xl bg-white rounded-sm overflow-hidden transition-all duration-75 shrink-0" style="width: ${cssWidth}px; height: ${cssHeight}px;">
-                                <canvas id="pdf-canvas-${p}" class="block w-full h-full pointer-events-none"></canvas>
-                                <div id="overlay-layer-${p}" data-page="${p}" class="overlay-layer absolute inset-0 z-10" onclick="handleStageTap(event, ${p})" ondblclick="handleStageDoubleClick(event, ${p})"></div>
-                                <div id="tap-indicator-${p}" class="tap-indicator hidden absolute pointer-events-none z-20 transition-all duration-75">
-                                    <div class="relative">
-                                        <div class="w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-blue-600 bg-blue-500/30 flex items-center justify-center shadow-sm">
-                                            <div class="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping"></div>
-                                        </div>
-                                        <div class="absolute left-2 top-0 w-12 border-b-2 border-blue-600/90 border-dashed"></div>
+                            <span class="text-[11px] text-slate-400 hidden sm:inline flex items-center gap-1.5">
+                                <i class="fa-regular fa-hand-pointer text-amber-400"></i>
+                                <span>Arrastra para reordenar o toca para escribir</span>
+                            </span>
+                        </div>
+                        <div id="pdf-stage-${p}" class="pdf-page-stage relative shadow-2xl bg-white rounded-sm overflow-hidden transition-all duration-75 shrink-0" style="width: ${cssWidth}px; height: ${cssHeight}px;">
+                            <canvas id="pdf-canvas-${p}" class="block w-full h-full pointer-events-none"></canvas>
+                            <div id="overlay-layer-${p}" data-page="${p}" class="overlay-layer absolute inset-0 z-10" onclick="handleStageTap(event, ${p})" ondblclick="handleStageDoubleClick(event, ${p})"></div>
+                            <div id="tap-indicator-${p}" class="tap-indicator hidden absolute pointer-events-none z-20 transition-all duration-75">
+                                <div class="relative">
+                                    <div class="w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-blue-600 bg-blue-500/30 flex items-center justify-center shadow-sm">
+                                        <div class="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping"></div>
                                     </div>
+                                    <div class="absolute left-2 top-0 w-12 border-b-2 border-blue-600/90 border-dashed"></div>
                                 </div>
                             </div>
-                        `;
+                        </div>
+                    `;
 
-                        // Attach drag & drop events to pageWrapper and its drag handle
-                        const handle = pageWrapper.querySelector('.page-drag-handle');
-                        if (handle) {
-                            handle.addEventListener('dragstart', (e) => {
-                                draggedDocPageNum = p;
-                                e.dataTransfer.effectAllowed = 'move';
-                                e.dataTransfer.setData('text/plain', String(p));
-                                setTimeout(() => {
-                                    pageWrapper.classList.add('page-dragging');
-                                }, 0);
-                            });
-
-                            handle.addEventListener('dragend', () => {
-                                draggedDocPageNum = null;
-                                document.querySelectorAll('.page-wrapper').forEach(w => {
-                                    w.classList.remove('page-dragging', 'drop-target-top', 'drop-target-bottom');
-                                });
-                            });
-                        }
-
-                        pageWrapper.addEventListener('dragover', (e) => {
-                            if (draggedDocPageNum === null || draggedDocPageNum === p) return;
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = 'move';
-
-                            const rect = pageWrapper.getBoundingClientRect();
-                            const isTop = (e.clientY < rect.top + (rect.height / 2));
-                            if (isTop) {
-                                pageWrapper.classList.add('drop-target-top');
-                                pageWrapper.classList.remove('drop-target-bottom');
-                            } else {
-                                pageWrapper.classList.add('drop-target-bottom');
-                                pageWrapper.classList.remove('drop-target-top');
-                            }
+                    // Attach drag & drop events to pageWrapper and its drag handle
+                    const handle = pageWrapper.querySelector('.page-drag-handle');
+                    if (handle) {
+                        handle.addEventListener('dragstart', (e) => {
+                            draggedDocPageNum = p;
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/plain', String(p));
+                            setTimeout(() => {
+                                pageWrapper.classList.add('page-dragging');
+                            }, 0);
                         });
 
-                        pageWrapper.addEventListener('dragleave', (e) => {
-                            const rect = pageWrapper.getBoundingClientRect();
-                            if (e.clientY < rect.top || e.clientY > rect.bottom || e.clientX < rect.left || e.clientX > rect.right) {
-                                pageWrapper.classList.remove('drop-target-top', 'drop-target-bottom');
-                            }
-                        });
-
-                        pageWrapper.addEventListener('drop', async (e) => {
-                            if (draggedDocPageNum === null) return;
-                            e.preventDefault();
-                            const fromPage = draggedDocPageNum;
-                            const toWrapperPage = p;
-                            pageWrapper.classList.remove('drop-target-top', 'drop-target-bottom');
+                        handle.addEventListener('dragend', () => {
                             draggedDocPageNum = null;
-
-                            if (fromPage === toWrapperPage) return;
-
-                            const rect = pageWrapper.getBoundingClientRect();
-                            const isTop = (e.clientY < rect.top + (rect.height / 2));
-
-                            let finalTargetPage = toWrapperPage;
-                            if (!isTop && toWrapperPage < fromPage) {
-                                finalTargetPage = toWrapperPage + 1;
-                            } else if (isTop && toWrapperPage > fromPage) {
-                                finalTargetPage = toWrapperPage - 1;
-                            }
-
-                            if (finalTargetPage === fromPage) return;
-                            await reorderDocumentPages(fromPage, finalTargetPage);
+                            document.querySelectorAll('.page-wrapper').forEach(w => {
+                                w.classList.remove('page-dragging', 'drop-target-top', 'drop-target-bottom');
+                            });
                         });
-
-                        container.appendChild(pageWrapper);
                     }
 
-                    // Render each page with PDF.js
-                    const pixelRatio = Math.max(window.devicePixelRatio || 1, 2);
-                    for (let p = 1; p <= totalPages; p++) {
-                        try {
-                            const page = await pdfJsDoc.getPage(p);
-                            const viewport = page.getViewport({ scale: currentZoom * pixelRatio });
-                            const canvas = document.getElementById(`pdf-canvas-${p}`);
-                            if (canvas) {
-                                const ctx = canvas.getContext('2d');
-                                canvas.width = viewport.width;
-                                canvas.height = viewport.height;
-                                await page.render({ canvasContext: ctx, viewport }).promise;
-                            }
-                        } catch (err) {
-                            console.warn(`Error rendering page ${p}:`, err);
+                    pageWrapper.addEventListener('dragover', (e) => {
+                        if (draggedDocPageNum === null || draggedDocPageNum === p) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+
+                        const rect = pageWrapper.getBoundingClientRect();
+                        const isTop = (e.clientY < rect.top + (rect.height / 2));
+                        if (isTop) {
+                            pageWrapper.classList.add('drop-target-top');
+                            pageWrapper.classList.remove('drop-target-bottom');
+                        } else {
+                            pageWrapper.classList.add('drop-target-bottom');
+                            pageWrapper.classList.remove('drop-target-top');
                         }
+                    });
+
+                    pageWrapper.addEventListener('dragleave', (e) => {
+                        const rect = pageWrapper.getBoundingClientRect();
+                        if (e.clientY < rect.top || e.clientY > rect.bottom || e.clientX < rect.left || e.clientX > rect.right) {
+                            pageWrapper.classList.remove('drop-target-top', 'drop-target-bottom');
+                        }
+                    });
+
+                    pageWrapper.addEventListener('drop', async (e) => {
+                        if (draggedDocPageNum === null) return;
+                        e.preventDefault();
+                        const fromPage = draggedDocPageNum;
+                        const toWrapperPage = p;
+                        pageWrapper.classList.remove('drop-target-top', 'drop-target-bottom');
+                        draggedDocPageNum = null;
+
+                        if (fromPage === toWrapperPage) return;
+
+                        const rect = pageWrapper.getBoundingClientRect();
+                        const isTop = (e.clientY < rect.top + (rect.height / 2));
+
+                        let finalTargetPage = toWrapperPage;
+                        if (!isTop && toWrapperPage < fromPage) {
+                            finalTargetPage = toWrapperPage + 1;
+                        } else if (isTop && toWrapperPage > fromPage) {
+                            finalTargetPage = toWrapperPage - 1;
+                        }
+
+                        if (finalTargetPage === fromPage) return;
+                        await reorderDocumentPages(fromPage, finalTargetPage);
+                    });
+
+                    container.appendChild(pageWrapper);
+                }
+
+                // Render each page with PDF.js
+                const pixelRatio = Math.max(window.devicePixelRatio || 1, 2);
+                for (let p = 1; p <= totalPages; p++) {
+                    try {
+                        const page = await pdfJsDoc.getPage(p);
+                        const viewport = page.getViewport({ scale: currentZoom * pixelRatio });
+                        const canvas = document.getElementById(`pdf-canvas-${p}`);
+                        if (canvas) {
+                            const ctx = canvas.getContext('2d');
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            await page.render({ canvasContext: ctx, viewport }).promise;
+                        }
+                    } catch (err) {
+                        console.warn(`Error rendering page ${p}:`, err);
                     }
                 }
 
@@ -2738,6 +2738,18 @@
             await reorderDocumentPages(fromPage, toPage);
         }
 
+        async function moveDocumentPageAndRefreshModal(fromPage, delta) {
+            const toPage = fromPage + delta;
+            if (toPage < 1 || toPage > totalPages) return;
+            await reorderDocumentPages(fromPage, toPage);
+            renderPageManagerModal();
+        }
+
+        async function deleteDocumentPageAndRefreshModal(pageNum) {
+            await deleteDocumentPage(pageNum);
+            renderPageManagerModal();
+        }
+
         async function reorderDocumentPages(fromPage, toPage) {
             if (fromPage === toPage || fromPage < 1 || fromPage > totalPages || toPage < 1 || toPage > totalPages) return;
             if (!currentPdfBytes) return;
@@ -2769,16 +2781,14 @@
                 });
 
                 currentPdfBytes = await newDoc.save();
-                currentPage = toPage;
-                await loadPdfFromBytes(currentPdfBytes);
-                await renderAllDocumentPages();
+                await loadPdfFromBytes(currentPdfBytes, toPage);
 
                 setTimeout(() => {
                     const targetEl = document.getElementById(`page-wrapper-${toPage}`);
                     if (targetEl) {
                         targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
-                }, 120);
+                }, 150);
 
                 scheduleAutoSave();
                 showToast(`✅ Página colocada en la posición ${toPage} de ${totalPages}`);
@@ -2825,9 +2835,8 @@
                 });
 
                 currentPdfBytes = await newDoc.save();
-                currentPage = Math.min(currentPage, newDoc.getPageCount());
-                await loadPdfFromBytes(currentPdfBytes);
-                await renderAllDocumentPages();
+                const newPage = Math.min(currentPage, newDoc.getPageCount());
+                await loadPdfFromBytes(currentPdfBytes, newPage);
                 scheduleAutoSave();
                 showToast(`✅ Página ${pageNum} eliminada. Quedan ${totalPages} páginas.`);
             } catch (err) {
@@ -2851,31 +2860,38 @@
 
             for (let p = 1; p <= totalPages; p++) {
                 const item = document.createElement('div');
-                item.className = 'bg-slate-50 border border-slate-200 hover:border-indigo-400 rounded-xl p-2.5 flex items-center justify-between gap-3 select-none transition';
+                item.className = 'bg-slate-50 border border-slate-200 hover:border-indigo-400 rounded-2xl p-3 flex items-center justify-between gap-3 select-none transition shadow-sm';
                 item.innerHTML = `
-                    <div class="flex items-center gap-2.5 min-w-0">
-                        <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-800 font-bold text-xs flex items-center justify-center shrink-0">
-                            ${p}
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="relative w-14 h-20 sm:w-16 sm:h-22 bg-white border border-slate-300 rounded-lg overflow-hidden shadow-sm shrink-0 flex items-center justify-center">
+                            <canvas id="page-mgr-thumb-${p}" class="w-full h-full object-contain pointer-events-none"></canvas>
+                            <span class="absolute top-1 left-1 bg-slate-900/90 text-white font-bold text-[10px] px-1.5 py-0.5 rounded shadow">
+                                ${p}
+                            </span>
                         </div>
                         <div class="min-w-0">
-                            <h5 class="text-xs font-bold text-slate-800">Página ${p}</h5>
-                            <p class="text-[10px] text-slate-500">Toca para ir a esta página</p>
+                            <h5 class="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                <span>Página ${p}</span>
+                                <span class="text-slate-400 text-xs font-normal">de ${totalPages}</span>
+                            </h5>
+                            <p class="text-[11px] text-slate-500 mt-0.5 truncate">Toca para ir a esta página en el documento</p>
                         </div>
                     </div>
-                    <div class="flex items-center gap-1 shrink-0">
-                        <button onclick="moveDocumentPage(${p}, -1).then(() => renderPageManagerModal())" ${p === 1 ? 'disabled' : ''} class="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-25 text-slate-700 flex items-center justify-center text-xs shadow-sm transition" title="Subir página">
-                            <i class="fa-solid fa-arrow-up"></i>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button onclick="event.stopPropagation(); moveDocumentPageAndRefreshModal(${p}, -1)" ${p === 1 ? 'disabled' : ''} class="w-9 h-9 rounded-xl bg-white border border-slate-300 hover:bg-indigo-50 hover:border-indigo-400 disabled:opacity-20 text-slate-700 hover:text-indigo-600 flex items-center justify-center text-xs shadow-sm active:scale-95 transition" title="Subir página">
+                            <i class="fa-solid fa-arrow-up text-sm"></i>
                         </button>
-                        <button onclick="moveDocumentPage(${p}, 1).then(() => renderPageManagerModal())" ${p === totalPages ? 'disabled' : ''} class="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-25 text-slate-700 flex items-center justify-center text-xs shadow-sm transition" title="Bajar página">
-                            <i class="fa-solid fa-arrow-down"></i>
+                        <button onclick="event.stopPropagation(); moveDocumentPageAndRefreshModal(${p}, 1)" ${p === totalPages ? 'disabled' : ''} class="w-9 h-9 rounded-xl bg-white border border-slate-300 hover:bg-indigo-50 hover:border-indigo-400 disabled:opacity-20 text-slate-700 hover:text-indigo-600 flex items-center justify-center text-xs shadow-sm active:scale-95 transition" title="Bajar página">
+                            <i class="fa-solid fa-arrow-down text-sm"></i>
                         </button>
                         ${totalPages > 1 ? `
-                        <button onclick="deleteDocumentPage(${p}).then(() => renderPageManagerModal())" class="w-8 h-8 rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs ml-1 shadow-sm transition" title="Eliminar página">
-                            <i class="fa-solid fa-trash-can"></i>
+                        <button onclick="event.stopPropagation(); deleteDocumentPageAndRefreshModal(${p})" class="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs shadow-sm active:scale-95 transition ml-1" title="Eliminar página">
+                            <i class="fa-solid fa-trash-can text-sm"></i>
                         </button>
                         ` : ''}
                     </div>
                 `;
+
                 item.onclick = (e) => {
                     if (e.target.closest('button')) return;
                     currentPage = p;
@@ -2884,6 +2900,20 @@
                     if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 };
                 list.appendChild(item);
+            }
+
+            // Render live preview thumbnail for each page
+            for (let p = 1; p <= totalPages; p++) {
+                const thumbCanvas = document.getElementById(`page-mgr-thumb-${p}`);
+                if (thumbCanvas && pdfJsDoc) {
+                    pdfJsDoc.getPage(p).then(page => {
+                        const viewport = page.getViewport({ scale: 0.25 });
+                        thumbCanvas.width = viewport.width;
+                        thumbCanvas.height = viewport.height;
+                        const ctx = thumbCanvas.getContext('2d');
+                        page.render({ canvasContext: ctx, viewport });
+                    }).catch(err => console.warn('Error rendering thumb:', err));
+                }
             }
         }
 
