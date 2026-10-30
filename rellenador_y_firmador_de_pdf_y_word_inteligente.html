@@ -2873,6 +2873,12 @@
                     }
                 });
 
+                // Keep attachmentsQueue in exact sync if created from images/queue
+                if (isCreatedFromImages && Array.isArray(attachmentsQueue) && attachmentsQueue.length === total) {
+                    const [movedQueueItem] = attachmentsQueue.splice(fromPage - 1, 1);
+                    attachmentsQueue.splice(toPage - 1, 0, movedQueueItem);
+                }
+
                 currentPdfBytes = await newDoc.save();
                 await loadPdfFromBytes(currentPdfBytes, toPage);
 
@@ -2940,6 +2946,11 @@
                         item.page = pageMapping[item.page];
                     }
                 });
+
+                // Keep attachmentsQueue in exact sync if created from images/queue
+                if (isCreatedFromImages && Array.isArray(attachmentsQueue) && attachmentsQueue.length === total) {
+                    attachmentsQueue.splice(pageNum - 1, 1);
+                }
 
                 currentPdfBytes = await newDoc.save();
                 const newPage = Math.min(currentPage, newDoc.getPageCount());
@@ -4959,8 +4970,12 @@
                 const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
                 let pdfDoc;
-                if (isCreatedFromImages) {
-                    // Rebuild the complete unified document directly from ALL items in attachmentsQueue in their exact order
+                if (currentPdfBytes) {
+                    // Always load currentPdfBytes as the master document:
+                    // It contains all the document pages in the exact sequence chosen by the user (preserving any reordering)
+                    pdfDoc = await PDFDocument.load(currentPdfBytes);
+                } else if (isCreatedFromImages && attachmentsQueue.length > 0) {
+                    // Fallback if currentPdfBytes is not yet compiled
                     pdfDoc = await PDFDocument.create();
                     for (const item of attachmentsQueue) {
                         if (item.type === 'image_page' && item.imageDataUrl) {
@@ -4983,11 +4998,7 @@
                         }
                     }
                 } else {
-                    if (currentPdfBytes) {
-                        pdfDoc = await PDFDocument.load(currentPdfBytes);
-                    } else {
-                        pdfDoc = await PDFDocument.create();
-                    }
+                    pdfDoc = await PDFDocument.create();
                 }
 
                 const fontHelvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
