@@ -138,12 +138,19 @@
                 <input type="file" id="images-to-pdf-upload" accept="image/*,.jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden" onchange="handleCreatePdfFromImagesUpload(event)">
             </label>
 
-            <!-- Upload real PDF or Word (.docx / .doc) -->
+            <!-- Upload real PDF or Word (.docx / .doc) or Project (.rellenador) -->
             <label class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow-sm">
                 <i class="fa-solid fa-folder-open text-amber-400"></i>
                 <span>Abrir Archivo</span>
-                <input type="file" id="pdf-upload" accept=".pdf,.docx,.doc,image/*,.jpg,.jpeg,.png,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" multiple class="hidden" onchange="handleFileUpload(event)">
+                <input type="file" id="pdf-upload" accept=".pdf,.docx,.doc,.rellenador,.json,image/*,.jpg,.jpeg,.png,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/json" multiple class="hidden" onchange="handleFileUpload(event)">
             </label>
+
+            <!-- Drafts / Saved Projects Manager (Edit anytime without starting from scratch) -->
+            <button onclick="openDraftsModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm" title="Borradores y proyectos para editar en cualquier momento">
+                <i class="fa-solid fa-clock-rotate-left text-sky-400"></i>
+                <span class="hidden sm:inline">Borradores</span>
+                <span id="top-drafts-badge" class="bg-sky-500/20 text-sky-300 px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+            </button>
 
             <!-- Quick Header Button for Attachments / DNI -->
             <button onclick="openModal('modal-attachments')" class="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
@@ -235,12 +242,36 @@
                 </button>
             </div>
 
-            <!-- Ink Color & Actions -->
+            <!-- Tipp-Ex Custom Width / Height Controls -->
+            <div id="whiteout-size-controls" class="hidden items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
+                <span class="text-[11px] text-rose-300 mr-1 font-medium">Ancho:</span>
+                <button onclick="resizeSelectedDimension('width', -1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Reducir ancho">
+                    <i class="fa-solid fa-arrows-left-right-to-line"></i>
+                </button>
+                <button onclick="resizeSelectedDimension('width', 1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Aumentar ancho">
+                    <i class="fa-solid fa-arrows-left-right"></i>
+                </button>
+                <span class="text-[11px] text-rose-300 mx-1 font-medium">Alto:</span>
+                <button onclick="resizeSelectedDimension('height', -1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Reducir alto">
+                    <i class="fa-solid fa-arrows-up-down-to-line"></i>
+                </button>
+                <button onclick="resizeSelectedDimension('height', 1)" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-bold" title="Aumentar alto">
+                    <i class="fa-solid fa-arrows-up-down"></i>
+                </button>
+            </div>
+
+            <!-- Ink & Tipp-Ex Color & Actions -->
             <div class="flex items-center gap-1.5">
                 <div id="text-color-controls" class="flex items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
                     <button onclick="setSelectedColor('#0f172a')" class="w-5 h-5 rounded-full bg-slate-900 border-2 border-white/70" title="Negro"></button>
                     <button onclick="setSelectedColor('#1d4ed8')" class="w-5 h-5 rounded-full bg-blue-700 border-2 border-white/70" title="Azul bolígrafo"></button>
                     <button onclick="setSelectedColor('#dc2626')" class="w-5 h-5 rounded-full bg-red-600 border-2 border-white/70" title="Rojo"></button>
+                </div>
+
+                <div id="whiteout-color-controls" class="hidden items-center gap-1 bg-slate-900/90 px-2 py-1 rounded-lg border border-blue-800">
+                    <button onclick="setSelectedColor('#ffffff')" class="w-5 h-5 rounded bg-white border-2 border-slate-400" title="Blanco puro"></button>
+                    <button onclick="setSelectedColor('#f8fafc')" class="w-5 h-5 rounded bg-slate-100 border-2 border-slate-300" title="Blanco papel"></button>
+                    <button onclick="setSelectedColor('#fef3c7')" class="w-5 h-5 rounded bg-amber-100 border-2 border-amber-300" title="Marfil / Papel antiguo"></button>
                 </div>
 
                 <button id="btn-edit-selected" onclick="openEditSelectedModal()" class="px-2.5 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-medium flex items-center gap-1">
@@ -318,6 +349,9 @@
             </button>
             <button onclick="insertTodayDate()" class="shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-amber-300 border border-slate-700 px-2.5 py-1 rounded-full text-xs font-medium transition flex items-center gap-1">
                 <i class="fa-regular fa-calendar"></i> Fecha Hoy
+            </button>
+            <button onclick="insertTippEx()" class="shrink-0 bg-slate-800 hover:bg-rose-950/60 active:scale-95 text-rose-300 border border-slate-700 hover:border-rose-500/60 px-2.5 py-1 rounded-full text-xs font-semibold transition flex items-center gap-1" title="Tapar texto antiguo con un parche blanco (ideal para corregir PDFs ya impresos)">
+                <i class="fa-solid fa-eraser text-rose-400"></i> Tipp-Ex (Tapar texto)
             </button>
 
             <!-- Dynamic Saved Chips rendered via JS -->
@@ -799,6 +833,118 @@
                         <i class="fa-solid fa-share-nodes"></i> Compartir (WhatsApp/Email)
                     </button>
                 </div>
+
+                <div class="pt-2 border-t border-slate-100">
+                    <button onclick="saveCurrentDraftPrompt()" class="w-full py-2.5 px-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-900 font-semibold text-xs flex items-center justify-center gap-1.5 transition border border-sky-200">
+                        <i class="fa-solid fa-clock-rotate-left text-sky-600"></i> Guardar borrador editable para modificar datos más tarde
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 8: BORRADORES Y PROYECTOS EDITABLES (EDITAR SIN EMPEZAR DE CERO)   -->
+    <!-- ========================================================================= -->
+    <div id="modal-drafts" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[94vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="bg-slate-900 text-white px-4 py-3.5 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-sky-600/30 border border-sky-400/40 flex items-center justify-center text-sky-400">
+                        <i class="fa-solid fa-clock-rotate-left text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm sm:text-base flex items-center gap-1.5">
+                            <span>Borradores y Proyectos Editables</span>
+                        </h3>
+                        <p class="text-[11px] text-slate-300">Modifica o borra datos de cualquier PDF sin tener que rellenarlo desde cero</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-drafts')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="bg-slate-100 px-3 pt-2 border-b border-slate-200 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+                <button onclick="switchDraftsTab('tab-drafts-list')" id="btn-tab-drafts-list" class="px-3 py-2 rounded-t-xl text-xs font-bold bg-white text-sky-700 border-t border-x border-slate-200 flex items-center gap-1.5 shrink-0">
+                    <i class="fa-solid fa-folder-tree"></i> Mis Borradores (<span id="drafts-tab-badge">0</span>)
+                </button>
+                <button onclick="switchDraftsTab('tab-drafts-save')" id="btn-tab-drafts-save" class="px-3 py-2 rounded-t-xl text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 shrink-0">
+                    <i class="fa-solid fa-floppy-disk text-emerald-600"></i> Guardar Borrador Actual
+                </button>
+                <button onclick="switchDraftsTab('tab-drafts-fields')" id="btn-tab-drafts-fields" class="px-3 py-2 rounded-t-xl text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 shrink-0">
+                    <i class="fa-solid fa-list-check text-blue-600"></i> Campos Rellenados (<span id="drafts-fields-badge">0</span>)
+                </button>
+            </div>
+
+            <!-- Scrollable Body -->
+            <div class="p-4 overflow-y-auto space-y-4 flex-1">
+                <!-- TAB 1: LIST OF DRAFTS -->
+                <div id="tab-drafts-list" class="space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2 bg-sky-50 border border-sky-200 rounded-xl p-2.5 text-xs text-sky-950">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-circle-info text-sky-600 text-sm shrink-0"></i>
+                            <span>Toca <strong>"Abrir y Editar"</strong> en cualquier borrador para modificar sus datos o campos de inmediato.</span>
+                        </div>
+                        <label class="bg-white hover:bg-sky-100 text-sky-800 border border-sky-300 px-2.5 py-1 rounded-lg font-semibold text-[11px] cursor-pointer flex items-center gap-1 transition shrink-0">
+                            <i class="fa-solid fa-upload"></i> Importar archivo .rellenador
+                            <input type="file" accept=".rellenador,.json" class="hidden" onchange="handleProjectFileInput(event)">
+                        </label>
+                    </div>
+
+                    <!-- Auto-save alert card -->
+                    <div id="autosave-card-container"></div>
+
+                    <!-- Drafts List Grid -->
+                    <div id="drafts-cards-list" class="space-y-2.5"></div>
+                </div>
+
+                <!-- TAB 2: SAVE CURRENT DRAFT -->
+                <div id="tab-drafts-save" class="hidden space-y-4">
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                        <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="fa-solid fa-floppy-disk text-emerald-600"></i> Guardar copia de este documento para el futuro
+                        </h4>
+                        <p class="text-xs text-slate-600">Guarda el formulario con todos los textos, firmas, anexos y fotos colocados. Cuando vuelvas a abrirlo, podrás cambiar el nombre, fecha, dirección o firmas sin volver a rellenar todo desde cero.</p>
+                        
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre o descripción del borrador:</label>
+                            <input type="text" id="input-save-draft-title" placeholder="Ej: Confirmación Parroquia - Lucas, Ficha Colegio 2026..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-medium bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none">
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row gap-2 pt-2">
+                            <button onclick="saveCurrentDraftFromTab()" class="flex-1 py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs sm:text-sm shadow flex items-center justify-center gap-1.5 transition">
+                                <i class="fa-solid fa-floppy-disk"></i> Guardar en este navegador
+                            </button>
+                            <button onclick="exportCurrentProjectFile()" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm shadow flex items-center justify-center gap-1.5 transition">
+                                <i class="fa-solid fa-file-arrow-down text-sky-400"></i> Descargar archivo (.rellenador)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: LIST OF PLACED FIELDS -->
+                <div id="tab-drafts-fields" class="hidden space-y-3">
+                    <div class="flex items-center justify-between text-xs text-slate-600">
+                        <span>Textos y datos colocados en este documento:</span>
+                        <button onclick="closeModal('modal-drafts'); openAddTextModal();" class="text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-plus"></i> Añadir otro campo
+                        </button>
+                    </div>
+                    <div id="drafts-fields-list" class="space-y-2 max-h-[50vh] overflow-y-auto"></div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+                <span id="drafts-footer-status" class="text-[11px] text-slate-500 flex items-center gap-1">
+                    <i class="fa-solid fa-shield-halved text-emerald-600"></i> Tus borradores se guardan 100% privados en tu dispositivo.
+                </span>
+                <button onclick="closeModal('modal-drafts')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold">
+                    Cerrar
+                </button>
             </div>
         </div>
     </div>
@@ -925,6 +1071,7 @@
 
         let currentPdfBytes = null;       // Uint8Array of the active PDF
         let pdfJsDoc = null;              // PDF.js document instance
+        let currentPdfFileName = 'Formulario_Confirmacion.pdf';
         let currentPage = 1;
         let totalPages = 1;
         let currentZoom = 1.0;
@@ -932,10 +1079,13 @@
         let baseViewportHeight = 842;     // Standard A4 point height at 1x
 
         // Placed elements on the PDF:
-        // { id, page, type: 'text'|'signature'|'image', xRatio, yRatio, text, fontSize, color, imageData, widthRatio, heightRatio }
+        // { id, page, type: 'text'|'signature'|'image'|'whiteout', xRatio, yRatio, text, fontSize, color, imageData, widthRatio, heightRatio }
         let placedElements = [];
         let selectedElementId = null;
         let editingElementId = null;
+
+        // Auto-save & Project Drafts State
+        let autoSaveTimer = null;
 
         // Last tapped relative position (0.0 to 1.0) on the current PDF page
         let lastTapPosition = { xRatio: 0.22, yRatio: 0.28 };
@@ -988,6 +1138,7 @@
             // Automatically generate and load the Sample Confirmation Form so the user can test right away
             await loadSampleConfirmationPDF(true);
             updateAttachmentsBadgesAndSummary();
+            updateDraftsBadges();
         };
 
         function initKeyboardShortcuts() {
@@ -1367,6 +1518,13 @@
             const lower = fileName.toLowerCase();
 
             try {
+                // Check if user selected an editable project file (.rellenador or .json project)
+                if (lower.endsWith('.rellenador') || lower.endsWith('.json')) {
+                    await handleProjectFileUpload(file);
+                    event.target.value = '';
+                    return;
+                }
+
                 // Check if user selected a Word file (.docx or .doc)
                 if (
                     lower.endsWith('.docx') ||
@@ -1386,6 +1544,7 @@
                 }
 
                 // Otherwise load as PDF
+                currentPdfFileName = file.name;
                 const arrayBuffer = await file.arrayBuffer();
                 placedElements = [];
                 deselectAll();
@@ -1971,6 +2130,16 @@
                     img.src = item.imageData;
                     img.className = 'w-full h-full object-contain pointer-events-none select-none';
                     el.appendChild(img);
+                } else if (item.type === 'whiteout') {
+                    const w = (item.widthRatio || 0.22) * stageWidth;
+                    const h = (item.heightRatio || 0.038) * stageHeight;
+                    el.style.width = w + 'px';
+                    el.style.height = h + 'px';
+                    el.style.backgroundColor = item.color || '#ffffff';
+                    el.style.boxShadow = '0 0 0 1px rgba(203, 213, 225, 0.8) inset';
+                    el.style.borderRadius = '2px';
+                    el.style.zIndex = '15';
+                    el.title = 'Tipp-Ex (Tapa texto). Arrastra para mover o usa los controles arriba';
                 }
 
                 // Make draggable via Mouse & Touch with Pointer Events
@@ -1979,6 +2148,7 @@
             });
 
             updateSelectionToolbarUI();
+            scheduleAutoSave();
         }
 
         function attachDragBehavior(domNode, item) {
@@ -2102,17 +2272,30 @@
 
             const sizeLabel = document.getElementById('selected-size-label');
             const colorControls = document.getElementById('text-color-controls');
+            const whiteoutSizeControls = document.getElementById('whiteout-size-controls');
+            const whiteoutColorControls = document.getElementById('whiteout-color-controls');
             const editBtn = document.getElementById('btn-edit-selected');
 
             if (item.type === 'text') {
                 sizeLabel.textContent = `${item.fontSize}px`;
-                colorControls.classList.remove('hidden');
-                editBtn.classList.remove('hidden');
+                if (colorControls) colorControls.classList.remove('hidden');
+                if (editBtn) editBtn.classList.remove('hidden');
+                if (whiteoutSizeControls) whiteoutSizeControls.classList.add('hidden');
+                if (whiteoutColorControls) whiteoutColorControls.classList.add('hidden');
+            } else if (item.type === 'whiteout') {
+                const pct = Math.round(((item.widthRatio || 0.22) / 0.22) * 100);
+                sizeLabel.textContent = `${pct}%`;
+                if (colorControls) colorControls.classList.add('hidden');
+                if (editBtn) editBtn.classList.add('hidden');
+                if (whiteoutSizeControls) whiteoutSizeControls.classList.remove('hidden');
+                if (whiteoutColorControls) whiteoutColorControls.classList.remove('hidden');
             } else {
                 const pct = Math.round((item.widthRatio / 0.24) * 100);
                 sizeLabel.textContent = `${pct}%`;
-                colorControls.classList.add('hidden');
-                editBtn.classList.add('hidden');
+                if (colorControls) colorControls.classList.add('hidden');
+                if (editBtn) editBtn.classList.add('hidden');
+                if (whiteoutSizeControls) whiteoutSizeControls.classList.add('hidden');
+                if (whiteoutColorControls) whiteoutColorControls.classList.add('hidden');
             }
         }
 
@@ -2132,6 +2315,16 @@
                 }
                 const label = document.getElementById('selected-size-label');
                 if (label) label.textContent = `${item.fontSize}px`;
+            } else if (item.type === 'whiteout') {
+                const factor = delta > 0 ? 1.15 : 0.87;
+                item.widthRatio = Math.max(0.02, Math.min(0.98, item.widthRatio * factor));
+                item.heightRatio = Math.max(0.015, Math.min(0.70, item.heightRatio * factor));
+                if (domNode) {
+                    domNode.style.width = (item.widthRatio * stageWidth) + 'px';
+                    domNode.style.height = (item.heightRatio * stageHeight) + 'px';
+                }
+                const label = document.getElementById('selected-size-label');
+                if (label) label.textContent = `${Math.round((item.widthRatio / 0.22) * 100)}%`;
             } else if (item.type === 'signature' || item.type === 'image') {
                 const factor = delta > 0 ? 1.08 : 0.92;
                 item.widthRatio = Math.max(0.06, Math.min(0.85, item.widthRatio * factor));
@@ -2143,6 +2336,30 @@
                 const label = document.getElementById('selected-size-label');
                 if (label) label.textContent = `${Math.round((item.widthRatio / 0.24) * 100)}%`;
             }
+            scheduleAutoSave();
+        }
+
+        function resizeSelectedDimension(dim, delta) {
+            const item = getSelectedElement();
+            if (!item || item.type !== 'whiteout') return;
+
+            const stageWidth = baseViewportWidth * currentZoom;
+            const stageHeight = baseViewportHeight * currentZoom;
+            const layer = document.getElementById('overlay-layer');
+            const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
+
+            if (dim === 'width') {
+                const factor = delta > 0 ? 1.18 : 0.85;
+                item.widthRatio = Math.max(0.02, Math.min(0.98, item.widthRatio * factor));
+                if (domNode) domNode.style.width = (item.widthRatio * stageWidth) + 'px';
+            } else if (dim === 'height') {
+                const factor = delta > 0 ? 1.25 : 0.80;
+                item.heightRatio = Math.max(0.01, Math.min(0.80, item.heightRatio * factor));
+                if (domNode) domNode.style.height = (item.heightRatio * stageHeight) + 'px';
+            }
+            const label = document.getElementById('selected-size-label');
+            if (label) label.textContent = `${Math.round((item.widthRatio / 0.22) * 100)}%`;
+            scheduleAutoSave();
         }
 
         function nudgeSelected(dxPx, dyPx) {
@@ -2162,11 +2379,13 @@
                     domNode.style.top = (item.yRatio * stageHeight) + 'px';
                 }
             }
+            scheduleAutoSave();
         }
 
         function setSelectedColor(hexColor) {
             const item = getSelectedElement();
-            if (item && item.type === 'text') {
+            if (!item) return;
+            if (item.type === 'text') {
                 item.color = hexColor;
                 const layer = document.getElementById('overlay-layer');
                 if (layer) {
@@ -2175,7 +2394,17 @@
                         domNode.style.color = hexColor;
                     }
                 }
+            } else if (item.type === 'whiteout') {
+                item.color = hexColor;
+                const layer = document.getElementById('overlay-layer');
+                if (layer) {
+                    const domNode = layer.querySelector(`[data-id="${item.id}"]`);
+                    if (domNode) {
+                        domNode.style.backgroundColor = hexColor;
+                    }
+                }
             }
+            scheduleAutoSave();
         }
 
         function duplicateSelected() {
@@ -3394,9 +3623,40 @@
                     }
                 }
 
-                // Stamp all texts, signatures, and direct images onto the corresponding pages
+                // Stamp all whiteout patches, texts, signatures, and direct images onto the corresponding pages
                 const pages = pdfDoc.getPages();
+
+                // 1. Draw whiteout (Tipp-Ex) patches FIRST so they cover pre-printed text on the original PDF
                 for (const item of placedElements) {
+                    if (item.type !== 'whiteout') continue;
+                    const pageIndex = item.page - 1;
+                    if (pageIndex < 0 || pageIndex >= pages.length) continue;
+
+                    const page = pages[pageIndex];
+                    const { width, height } = page.getSize();
+
+                    const pdfX = item.xRatio * width;
+                    const pdfW = (item.widthRatio || 0.22) * width;
+                    const pdfH = (item.heightRatio || 0.038) * height;
+                    const pdfY = height - (item.yRatio * height) - pdfH;
+
+                    const hex = item.color || '#ffffff';
+                    const r = parseInt(hex.slice(1, 3), 16) / 255;
+                    const g = parseInt(hex.slice(3, 5), 16) / 255;
+                    const b = parseInt(hex.slice(5, 7), 16) / 255;
+
+                    page.drawRectangle({
+                        x: pdfX,
+                        y: pdfY,
+                        width: pdfW,
+                        height: pdfH,
+                        color: rgb(r, g, b)
+                    });
+                }
+
+                // 2. Draw texts, signatures, and images on top
+                for (const item of placedElements) {
+                    if (item.type === 'whiteout') continue;
                     const pageIndex = item.page - 1;
                     if (pageIndex < 0 || pageIndex >= pages.length) continue;
 
@@ -3434,6 +3694,9 @@
                         });
                     }
                 }
+
+                // Automatically update auto-save so user can reopen this exact exported session
+                scheduleAutoSave();
 
                 const finalPdfBytes = await pdfDoc.save();
                 lastExportedBlob = new Blob([finalPdfBytes], { type: 'application/pdf' });
@@ -3488,6 +3751,560 @@
                 }
             } catch (e) {
                 console.log('Share cancelled or not supported:', e);
+            }
+        }
+
+        // ============================================================================
+        // TIP-EX / WHITEOUT TOOL (TAPAR TEXTOS ANTIGUOS EN PDFs YA IMPRESOS)
+        // ============================================================================
+        function insertTippEx() {
+            const newId = 'whiteout_' + Date.now();
+            const wRatio = 0.22;
+            const hRatio = 0.038;
+            const x = Math.max(0.005, Math.min(0.98 - wRatio, lastTapPosition.xRatio - 0.02));
+            const y = Math.max(0.005, Math.min(0.98 - hRatio, lastTapPosition.yRatio - (hRatio * 0.5)));
+
+            placedElements.push({
+                id: newId,
+                page: currentPage,
+                type: 'whiteout',
+                xRatio: x,
+                yRatio: y,
+                widthRatio: wRatio,
+                heightRatio: hRatio,
+                color: '#ffffff'
+            });
+            renderOverlays();
+            selectElement(newId);
+            showToast('Parche Tipp-Ex colocado. Muévelo sobre el texto antiguo para taparlo');
+        }
+
+        // ============================================================================
+        // INDEXEDDB DRAFTS STORAGE (GUARDAR Y REANUDAR SIN EMPEZAR DE CERO)
+        // ============================================================================
+        const IDB_NAME = 'RellenadorPdfDB_v2';
+        const IDB_STORE = 'projects';
+
+        function openDraftsDB() {
+            return new Promise((resolve) => {
+                if (!window.indexedDB) {
+                    resolve(null);
+                    return;
+                }
+                const req = indexedDB.open(IDB_NAME, 1);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(IDB_STORE)) {
+                        db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+                    }
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => resolve(null);
+            });
+        }
+
+        async function idbSaveDraft(draft) {
+            try {
+                const db = await openDraftsDB();
+                if (!db) return false;
+                return new Promise((resolve) => {
+                    const tx = db.transaction(IDB_STORE, 'readwrite');
+                    tx.objectStore(IDB_STORE).put(draft);
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                });
+            } catch (e) {
+                console.warn('IDB save error:', e);
+                return false;
+            }
+        }
+
+        async function idbGetDraft(id) {
+            try {
+                const db = await openDraftsDB();
+                if (!db) return null;
+                return new Promise((resolve) => {
+                    const tx = db.transaction(IDB_STORE, 'readonly');
+                    const req = tx.objectStore(IDB_STORE).get(id);
+                    req.onsuccess = () => resolve(req.result || null);
+                    req.onerror = () => resolve(null);
+                });
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function idbGetAllDrafts() {
+            try {
+                const db = await openDraftsDB();
+                if (!db) return [];
+                return new Promise((resolve) => {
+                    const tx = db.transaction(IDB_STORE, 'readonly');
+                    const req = tx.objectStore(IDB_STORE).getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => resolve([]);
+                });
+            } catch (e) {
+                return [];
+            }
+        }
+
+        async function idbDeleteDraft(id) {
+            try {
+                const db = await openDraftsDB();
+                if (!db) return false;
+                return new Promise((resolve) => {
+                    const tx = db.transaction(IDB_STORE, 'readwrite');
+                    tx.objectStore(IDB_STORE).delete(id);
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                });
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function createCurrentDraftSnapshot(id, title, isAutosave = false) {
+            return {
+                id: id || ('draft_' + Date.now()),
+                title: title || (currentPdfFileName ? currentPdfFileName.replace(/\.[^/.]+$/, '') : 'Documento Sin Título'),
+                savedAt: new Date().toISOString(),
+                isAutosave: !!isAutosave,
+                currentPdfFileName: currentPdfFileName || 'documento.pdf',
+                pdfBytes: currentPdfBytes ? currentPdfBytes.slice(0) : null,
+                placedElements: JSON.parse(JSON.stringify(placedElements)),
+                attachmentsQueue: JSON.parse(JSON.stringify(attachmentsQueue)),
+                isCreatedFromImages: isCreatedFromImages,
+                currentWordHtmlContent: currentWordHtmlContent || null,
+                currentWordFileName: currentWordFileName || null,
+                currentPage: currentPage
+            };
+        }
+
+        function scheduleAutoSave() {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(async () => {
+                if (!currentPdfBytes && !isCreatedFromImages && !currentWordHtmlContent) return;
+                const docTitle = currentPdfFileName ? currentPdfFileName.replace(/\.[^/.]+$/, '') : 'Documento';
+                const snapshot = createCurrentDraftSnapshot('autosave', 'Último trabajo automático (' + docTitle + ')', true);
+                await idbSaveDraft(snapshot);
+                updateDraftsBadges();
+            }, 1200);
+        }
+
+        async function saveCurrentDraftNamed(customTitle, isSilent = false) {
+            if (!currentPdfBytes && !isCreatedFromImages && !currentWordHtmlContent) {
+                if (!isSilent) showToast('Primero abre o crea algún documento para guardarlo');
+                return null;
+            }
+            const titleInput = document.getElementById('input-save-draft-title');
+            const title = customTitle || (titleInput ? titleInput.value.trim() : '') || (currentPdfFileName ? currentPdfFileName.replace(/\.[^/.]+$/, '') : 'Mi Borrador');
+            const id = 'draft_' + Date.now();
+            const snapshot = createCurrentDraftSnapshot(id, title, false);
+            await idbSaveDraft(snapshot);
+            await updateDraftsBadges();
+            if (!isSilent) {
+                showToast(`¡Borrador "${title}" guardado! Podrás abrirlo y editarlo cuando quieras`);
+                switchDraftsTab('tab-drafts-list');
+                renderDraftsListUI();
+            }
+            return snapshot;
+        }
+
+        async function saveCurrentDraftFromTab() {
+            const titleInput = document.getElementById('input-save-draft-title');
+            const title = titleInput ? titleInput.value.trim() : '';
+            await saveCurrentDraftNamed(title);
+            if (titleInput) titleInput.value = '';
+        }
+
+        async function saveCurrentDraftPrompt() {
+            const defName = currentPdfFileName ? currentPdfFileName.replace(/\.[^/.]+$/, '') : 'Mi Formulario';
+            const name = prompt('Nombre para este borrador editable:', defName);
+            if (name === null) return;
+            await saveCurrentDraftNamed(name.trim() || defName);
+            closeModal('modal-export-ready');
+            openDraftsModal('tab-drafts-list');
+        }
+
+        async function loadDraftObject(draft) {
+            if (!draft) return;
+            try {
+                showToast('Recuperando borrador: ' + draft.title + '...');
+                currentPdfFileName = draft.currentPdfFileName || 'documento.pdf';
+                placedElements = draft.placedElements ? JSON.parse(JSON.stringify(draft.placedElements)) : [];
+                attachmentsQueue = draft.attachmentsQueue ? JSON.parse(JSON.stringify(draft.attachmentsQueue)) : [];
+                isCreatedFromImages = !!draft.isCreatedFromImages;
+                currentWordHtmlContent = draft.currentWordHtmlContent || null;
+                currentWordFileName = draft.currentWordFileName || null;
+
+                if (draft.pdfBytes) {
+                    const u8 = draft.pdfBytes instanceof Uint8Array ? draft.pdfBytes : new Uint8Array(draft.pdfBytes);
+                    await loadPdfFromBytes(u8);
+                } else if (draft.pdfBase64) {
+                    await loadPdfFromBytes(base64ToUint8Array(draft.pdfBase64));
+                } else if (isCreatedFromImages && attachmentsQueue.length > 0) {
+                    await rebuildPdfFromAttachmentsQueue();
+                } else if (currentWordHtmlContent) {
+                    const bytes = await convertWordHtmlToPdfBytes(currentWordHtmlContent);
+                    await loadPdfFromBytes(bytes);
+                }
+
+                currentPage = Math.min(draft.currentPage || 1, totalPages);
+                await renderCurrentPage();
+                renderOverlays();
+                updateAttachmentsBadgesAndSummary();
+                closeModal('modal-drafts');
+                showToast(`¡Borrador cargado! Puedes editar o borrar cualquier campo`);
+            } catch (err) {
+                console.error('Error loading draft:', err);
+                showToast('Hubo un problema al cargar el borrador');
+            }
+        }
+
+        async function loadDraftById(id) {
+            const draft = await idbGetDraft(id);
+            if (!draft) {
+                showToast('No se encontró el borrador seleccionado');
+                return;
+            }
+            await loadDraftObject(draft);
+        }
+
+        async function duplicateDraftById(id) {
+            const draft = await idbGetDraft(id);
+            if (!draft) return;
+            const copy = JSON.parse(JSON.stringify(draft));
+            copy.id = 'draft_' + Date.now();
+            copy.title = (draft.title || 'Borrador') + ' (Copia)';
+            copy.savedAt = new Date().toISOString();
+            copy.isAutosave = false;
+            await idbSaveDraft(copy);
+            await updateDraftsBadges();
+            renderDraftsListUI();
+            showToast(`Copia creada: "${copy.title}"`);
+        }
+
+        async function deleteDraftById(id) {
+            if (!confirm('¿Seguro que quieres eliminar este borrador?')) return;
+            await idbDeleteDraft(id);
+            await updateDraftsBadges();
+            renderDraftsListUI();
+            showToast('Borrador eliminado');
+        }
+
+        function openDraftsModal(tabId = 'tab-drafts-list') {
+            switchDraftsTab(tabId);
+            renderDraftsListUI();
+            renderDraftFieldsUI();
+            updateDraftsBadges();
+            openModal('modal-drafts');
+        }
+
+        function switchDraftsTab(tabId) {
+            ['tab-drafts-list', 'tab-drafts-save', 'tab-drafts-fields'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+            const target = document.getElementById(tabId);
+            if (target) target.classList.remove('hidden');
+
+            const activeClass = 'px-3 py-2 rounded-t-xl text-xs font-bold bg-white text-sky-700 border-t border-x border-slate-200 flex items-center gap-1.5 shrink-0';
+            const inactiveClass = 'px-3 py-2 rounded-t-xl text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 shrink-0';
+
+            const btnList = document.getElementById('btn-tab-drafts-list');
+            const btnSave = document.getElementById('btn-tab-drafts-save');
+            const btnFields = document.getElementById('btn-tab-drafts-fields');
+
+            if (btnList) btnList.className = tabId === 'tab-drafts-list' ? activeClass : inactiveClass;
+            if (btnSave) btnSave.className = tabId === 'tab-drafts-save' ? activeClass : inactiveClass;
+            if (btnFields) btnFields.className = tabId === 'tab-drafts-fields' ? activeClass : inactiveClass;
+
+            if (tabId === 'tab-drafts-list') renderDraftsListUI();
+            if (tabId === 'tab-drafts-fields') renderDraftFieldsUI();
+        }
+
+        async function updateDraftsBadges() {
+            const all = await idbGetAllDrafts();
+            const userDrafts = all.filter(d => d.id !== 'autosave');
+            const count = userDrafts.length;
+            const topBadge = document.getElementById('top-drafts-badge');
+            const tabBadge = document.getElementById('drafts-tab-badge');
+            if (topBadge) topBadge.textContent = count;
+            if (tabBadge) tabBadge.textContent = count;
+        }
+
+        async function renderDraftsListUI() {
+            const container = document.getElementById('drafts-cards-list');
+            const autosaveBox = document.getElementById('autosave-card-container');
+            if (!container) return;
+
+            const allDrafts = await idbGetAllDrafts();
+            const userDrafts = allDrafts.filter(d => d.id !== 'autosave').sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+            const autosaveDraft = allDrafts.find(d => d.id === 'autosave');
+
+            // Render Autosave Card
+            if (autosaveDraft && autosaveDraft.placedElements && autosaveDraft.placedElements.length > 0) {
+                const dateStr = formatRelativeTime(new Date(autosaveDraft.savedAt));
+                const textCount = (autosaveDraft.placedElements || []).filter(e => e.type === 'text').length;
+                const sigCount = (autosaveDraft.placedElements || []).filter(e => e.type === 'signature').length;
+                const annexCount = (autosaveDraft.attachmentsQueue || []).length;
+
+                autosaveBox.innerHTML = `
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <div class="flex items-start gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                                <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs font-bold text-amber-950">Última sesión autoguardada</span>
+                                    <span class="text-[10px] bg-amber-200/80 text-amber-900 font-medium px-1.5 py-0.2 rounded-full">${dateStr}</span>
+                                </div>
+                                <p class="text-[11px] text-amber-800">${escapeHtml(autosaveDraft.title)} (${textCount} campo(s), ${sigCount} firma(s), ${annexCount} anexo(s))</p>
+                            </div>
+                        </div>
+                        <button onclick="loadDraftById('autosave')" class="self-end sm:self-auto px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm flex items-center gap-1 shrink-0">
+                            <i class="fa-solid fa-rotate-left"></i> Recuperar sesión
+                        </button>
+                    </div>
+                `;
+            } else {
+                autosaveBox.innerHTML = '';
+            }
+
+            // Render User Saved Drafts
+            container.innerHTML = '';
+            if (userDrafts.length === 0) {
+                container.innerHTML = `
+                    <div class="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-6 text-center text-xs text-slate-500 space-y-2">
+                        <i class="fa-solid fa-folder-open text-slate-400 text-2xl block"></i>
+                        <p class="font-medium text-slate-700">No tienes borradores guardados todavía.</p>
+                        <p class="text-[11px]">Cuando estés rellenando cualquier documento, pulsa en la pestaña <strong>"Guardar Borrador Actual"</strong> para poder editarlo o reutilizarlo en el futuro con 1 solo clic.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            userDrafts.forEach(draft => {
+                const dateStr = formatRelativeTime(new Date(draft.savedAt));
+                const textCount = (draft.placedElements || []).filter(e => e.type === 'text').length;
+                const sigCount = (draft.placedElements || []).filter(e => e.type === 'signature').length;
+                const annexCount = (draft.attachmentsQueue || []).length;
+
+                const card = document.createElement('div');
+                card.className = 'bg-white hover:bg-sky-50/40 border border-slate-200 hover:border-sky-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm transition';
+                card.innerHTML = `
+                    <div class="flex items-start gap-3 min-w-0 flex-1">
+                        <div class="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-file-signature text-base"></i>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <h4 class="text-xs sm:text-sm font-bold text-slate-900 truncate">${escapeHtml(draft.title)}</h4>
+                                <span class="text-[10px] text-slate-400 shrink-0">${dateStr}</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-slate-500">
+                                <span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">${textCount} campo(s)</span>
+                                ${sigCount > 0 ? `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded font-medium">${sigCount} firma(s)</span>` : ''}
+                                ${annexCount > 0 ? `<span class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-medium">${annexCount} anexo(s)</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                        <button onclick="loadDraftById('${draft.id}')" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition">
+                            <i class="fa-solid fa-pen-to-square"></i> Abrir y Editar
+                        </button>
+                        <button onclick="duplicateDraftById('${draft.id}')" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs flex items-center justify-center transition" title="Duplicar para otra persona">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                        <button onclick="exportDraftToFileById('${draft.id}')" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs flex items-center justify-center transition" title="Descargar archivo (.rellenador)">
+                            <i class="fa-solid fa-download"></i>
+                        </button>
+                        <button onclick="deleteDraftById('${draft.id}')" class="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs flex items-center justify-center transition" title="Eliminar borrador">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderDraftFieldsUI() {
+            const list = document.getElementById('drafts-fields-list');
+            const badge = document.getElementById('drafts-fields-badge');
+            if (badge) badge.textContent = placedElements.length;
+            if (!list) return;
+            list.innerHTML = '';
+
+            if (placedElements.length === 0) {
+                list.innerHTML = `<div class="text-center py-6 text-xs text-slate-400">No hay ningún campo o dato colocado en este documento todavía.</div>`;
+                return;
+            }
+
+            placedElements.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-2 text-xs';
+
+                let icon = '<i class="fa-solid fa-font text-blue-600"></i>';
+                let label = item.text || '';
+                let typeBadge = '<span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-1.5 py-0.2 rounded">Texto</span>';
+
+                if (item.type === 'signature') {
+                    icon = '<i class="fa-solid fa-signature text-emerald-600"></i>';
+                    label = 'Firma incrustada';
+                    typeBadge = '<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.2 rounded">Firma</span>';
+                } else if (item.type === 'whiteout') {
+                    icon = '<i class="fa-solid fa-eraser text-rose-600"></i>';
+                    label = 'Parche Tipp-Ex (Tapa texto)';
+                    typeBadge = '<span class="bg-rose-100 text-rose-800 text-[10px] font-bold px-1.5 py-0.2 rounded">Tipp-Ex</span>';
+                } else if (item.type === 'image') {
+                    icon = '<i class="fa-solid fa-image text-indigo-600"></i>';
+                    label = 'Imagen / Foto estampada';
+                    typeBadge = '<span class="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-1.5 py-0.2 rounded">Foto</span>';
+                }
+
+                row.innerHTML = `
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center justify-center shrink-0">P.${item.page}</span>
+                        ${icon}
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5">${typeBadge}</div>
+                            <p class="font-semibold text-slate-800 truncate">${escapeHtml(label)}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                        ${item.type === 'text' ? `
+                            <button onclick="closeModal('modal-drafts'); selectElement('${item.id}'); openEditSelectedModal();" class="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs flex items-center gap-1">
+                                <i class="fa-solid fa-pen"></i> Editar
+                            </button>
+                        ` : ''}
+                        <button onclick="selectElement('${item.id}'); deleteSelected(); renderDraftFieldsUI();" class="w-7 h-7 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs" title="Borrar campo">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        function formatRelativeTime(date) {
+            const now = new Date();
+            const diffSec = Math.floor((now - date) / 1000);
+            if (diffSec < 60) return 'Hace un momento';
+            const diffMin = Math.floor(diffSec / 60);
+            if (diffMin < 60) return `Hace ${diffMin} min`;
+            const diffH = Math.floor(diffMin / 60);
+            if (diffH < 24) return `Hace ${diffH} h`;
+            return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function uint8ArrayToBase64(uint8) {
+            let binary = '';
+            const len = uint8.byteLength;
+            const chunkSize = 8192;
+            for (let i = 0; i < len; i += chunkSize) {
+                binary += String.fromCharCode.apply(null, uint8.subarray(i, Math.min(i + chunkSize, len)));
+            }
+            return btoa(binary);
+        }
+
+        function base64ToUint8Array(base64) {
+            const binary = atob(base64);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        function exportCurrentProjectFile() {
+            if (!currentPdfBytes && !isCreatedFromImages && !currentWordHtmlContent) {
+                showToast('Primero abre un documento para exportar el proyecto');
+                return;
+            }
+            const titleInput = document.getElementById('input-save-draft-title');
+            const title = (titleInput ? titleInput.value.trim() : '') || (currentPdfFileName ? currentPdfFileName.replace(/\.[^/.]+$/, '') : 'Proyecto_PDF');
+            
+            const projectData = {
+                app: 'rellenador-pdf-inteligente',
+                version: 2,
+                title: title,
+                exportedAt: new Date().toISOString(),
+                currentPdfFileName: currentPdfFileName || 'documento.pdf',
+                pdfBase64: currentPdfBytes ? uint8ArrayToBase64(currentPdfBytes) : null,
+                placedElements: placedElements,
+                attachmentsQueue: attachmentsQueue,
+                isCreatedFromImages: isCreatedFromImages,
+                currentWordHtmlContent: currentWordHtmlContent,
+                currentWordFileName: currentWordFileName,
+                currentPage: currentPage
+            };
+
+            const jsonStr = JSON.stringify(projectData, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${title.replace(/\s+/g, '_')}.rellenador`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+            showToast('Archivo de proyecto (.rellenador) descargado');
+        }
+
+        async function exportDraftToFileById(id) {
+            const draft = await idbGetDraft(id);
+            if (!draft) return;
+            const projectData = {
+                app: 'rellenador-pdf-inteligente',
+                version: 2,
+                title: draft.title,
+                exportedAt: new Date().toISOString(),
+                currentPdfFileName: draft.currentPdfFileName || 'documento.pdf',
+                pdfBase64: draft.pdfBytes ? uint8ArrayToBase64(draft.pdfBytes) : (draft.pdfBase64 || null),
+                placedElements: draft.placedElements || [],
+                attachmentsQueue: draft.attachmentsQueue || [],
+                isCreatedFromImages: !!draft.isCreatedFromImages,
+                currentWordHtmlContent: draft.currentWordHtmlContent || null,
+                currentWordFileName: draft.currentWordFileName || null,
+                currentPage: draft.currentPage || 1
+            };
+            const jsonStr = JSON.stringify(projectData, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${(draft.title || 'Proyecto').replace(/\s+/g, '_')}.rellenador`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+            showToast('Archivo .rellenador descargado');
+        }
+
+        async function handleProjectFileInput(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            await handleProjectFileUpload(file);
+            event.target.value = '';
+        }
+
+        async function handleProjectFileUpload(file) {
+            try {
+                showToast('Leyendo archivo de proyecto: ' + file.name + '...');
+                const text = await file.text();
+                const project = JSON.parse(text);
+                if (!project || (!project.pdfBase64 && !project.pdfBytes && !project.isCreatedFromImages && !project.currentWordHtmlContent && !project.placedElements)) {
+                    showToast('El archivo no parece un proyecto válido de esta app');
+                    return;
+                }
+                await loadDraftObject(project);
+            } catch (e) {
+                console.error(e);
+                showToast('Error al importar el archivo de proyecto');
             }
         }
 
