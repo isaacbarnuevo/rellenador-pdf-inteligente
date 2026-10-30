@@ -420,11 +420,6 @@
     <footer class="bg-slate-900 border-t border-slate-800 text-white shrink-0 z-40 shadow-2xl">
         <!-- Quick Saved Data Horizontal Strip -->
         <div class="px-3 py-1.5 bg-slate-950/80 border-b border-slate-800/80 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            <!-- Tipp-Ex first for instant mobile access without having to scroll -->
-            <button onclick="insertTippEx()" class="shrink-0 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1 shadow-md" title="Tapar texto antiguo con parche blanco">
-                <i class="fa-solid fa-eraser"></i> Tipp-Ex (Tapar)
-            </button>
-            <span class="text-[10px] font-semibold text-slate-500 shrink-0">|</span>
             <button onclick="insertQuickText('✓', 16)" class="shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-emerald-400 border border-slate-700 px-2.5 py-1 rounded-full text-xs font-bold transition">
                 ✓ Marca
             </button>
@@ -544,36 +539,6 @@
                     </div>
                     <i class="fa-solid fa-chevron-right text-slate-500 group-hover:text-sky-300 transition shrink-0 ml-2"></i>
                 </button>
-
-                <!-- Section: Documentos de Prueba / Demos -->
-                <div class="pt-2 border-t border-slate-800">
-                    <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <i class="fa-solid fa-flask text-amber-400"></i>
-                        <span>Documentos de prueba y demostración (Demo)</span>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button onclick="closeModal('modal-open-document'); loadSampleConfirmationPDF(false);" class="text-left bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700 hover:border-amber-500/50 p-2.5 rounded-xl transition flex items-center gap-2.5 group">
-                            <div class="w-8 h-8 rounded-lg bg-rose-600/20 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0">
-                                <i class="fa-solid fa-file-pdf"></i>
-                            </div>
-                            <div class="overflow-hidden">
-                                <div class="text-xs font-bold text-white group-hover:text-amber-300 transition">Demo PDF</div>
-                                <p class="text-[10px] text-slate-400 truncate">Formulario Confirmación</p>
-                            </div>
-                        </button>
-
-                        <button onclick="closeModal('modal-open-document'); loadSampleWordDocument();" class="text-left bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700 hover:border-sky-500/50 p-2.5 rounded-xl transition flex items-center gap-2.5 group">
-                            <div class="w-8 h-8 rounded-lg bg-sky-600/20 text-sky-400 border border-sky-500/30 flex items-center justify-center shrink-0">
-                                <i class="fa-solid fa-file-word"></i>
-                            </div>
-                            <div class="overflow-hidden">
-                                <div class="text-xs font-bold text-white group-hover:text-sky-300 transition">Probar Word (.docx)</div>
-                                <p class="text-[10px] text-slate-400 truncate">Plantilla editable</p>
-                            </div>
-                        </button>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -807,9 +772,6 @@
                                 </h4>
                                 <p class="text-[11px] text-indigo-800/80">Sube o haz foto del Anverso y Reverso; se colocan centrados y a tamaño real.</p>
                             </div>
-                            <button onclick="loadDemoDNIPair()" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border border-indigo-300 px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1">
-                                <i class="fa-solid fa-wand-magic-sparkles"></i> Cargar DNI de Prueba
-                            </button>
                         </div>
 
                         <input type="text" id="dni-title-input" placeholder="Título en la hoja (ej: DNI - Lucas Vázquez Muñoz / Padre)" class="w-full px-3 py-2 rounded-xl border border-indigo-200 text-xs font-medium bg-white">
@@ -1021,6 +983,17 @@
                     <div><i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> Textos largos y apellidos incrustados sin recortes.</div>
                     <div><i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> Firmas aplicadas con fondo transparente.</div>
                     <div id="export-summary-annex-line"><i class="fa-solid fa-check text-emerald-600 mr-1.5"></i> Documentos anexos unidos al final del PDF.</div>
+                </div>
+
+                <!-- Document Name with 1st page extracted title -->
+                <div class="text-left bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 space-y-1.5">
+                    <label class="block text-xs font-bold text-emerald-950 flex items-center justify-between">
+                        <span class="flex items-center gap-1.5">
+                            <i class="fa-solid fa-file-signature text-emerald-600"></i> Nombre del archivo PDF:
+                        </span>
+                        <span class="text-[10px] text-emerald-700 font-medium">Extraído del título</span>
+                    </label>
+                    <input type="text" id="export-filename-input" class="w-full text-xs font-bold px-3 py-2 rounded-lg border border-emerald-300 bg-white text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm" value="" oninput="updateCustomExportFileName(this.value)">
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-2.5 pt-1">
@@ -1310,7 +1283,112 @@
 
         // Last exported PDF Blob & File for re-downloading or native mobile sharing
         let lastExportedBlob = null;
-        let lastExportedFileName = 'Formulario_y_Anexos_Completo.pdf';
+        let lastExportedFileName = 'SACRAMENTO_DE_LA_CONFIRMACION.pdf';
+        let currentDocumentTitle = null;
+        let originalUploadedFileName = null;
+
+        function getSmartExportFileName() {
+            let baseName = '';
+            if (currentDocumentTitle && currentDocumentTitle.trim().length > 2) {
+                baseName = currentDocumentTitle.trim();
+            } else if (originalUploadedFileName && originalUploadedFileName.trim().length > 2) {
+                baseName = originalUploadedFileName.trim();
+            } else if (isCreatedFromImages) {
+                baseName = 'Documento_Fotos_y_Anexos';
+            } else {
+                baseName = 'SACRAMENTO_DE_LA_CONFIRMACION';
+            }
+
+            // Remove or replace forbidden characters in Windows / Mac / Linux file systems
+            let clean = baseName
+                .replace(/[\\/:*?"<>|]+/g, '_')
+                .replace(/\s+/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^[._]+|[._]+$/g, '')
+                .trim();
+
+            if (!clean) clean = 'Documento_Completo';
+            if (!clean.toLowerCase().endsWith('.pdf')) {
+                clean += '.pdf';
+            }
+            return clean;
+        }
+
+        function updateCustomExportFileName(val) {
+            let name = val.trim();
+            if (!name) return;
+            if (!name.toLowerCase().endsWith('.pdf')) name += '.pdf';
+            lastExportedFileName = name;
+        }
+
+        async function extractTitleFromPage(pdfPage) {
+            try {
+                const textContent = await pdfPage.getTextContent();
+                if (!textContent || !textContent.items || !textContent.items.length) return null;
+
+                // Sort items from top of page to bottom, then left to right
+                const items = textContent.items
+                    .filter(it => it.str && it.str.trim().length > 0)
+                    .sort((a, b) => {
+                        const yA = a.transform[5];
+                        const yB = b.transform[5];
+                        if (Math.abs(yA - yB) > 4) return yB - yA;
+                        return a.transform[4] - b.transform[4];
+                    });
+
+                if (!items.length) return null;
+
+                // Group items into visual lines based on vertical proximity
+                const lines = [];
+                let curLine = '';
+                let lastY = null;
+
+                for (const it of items) {
+                    const y = it.transform[5];
+                    if (lastY !== null && Math.abs(y - lastY) > 5) {
+                        if (curLine.trim()) lines.push({ text: curLine.trim(), y: lastY });
+                        curLine = it.str;
+                    } else {
+                        curLine += (curLine ? ' ' : '') + it.str;
+                    }
+                    lastY = y;
+                }
+                if (curLine.trim()) lines.push({ text: curLine.trim(), y: lastY });
+
+                // Inspect top 8 lines of the document
+                const topLines = lines.slice(0, 8);
+
+                // Strategy 1: Look for lines with strong document keywords (SACRAMENTO, CONFIRMACI, CONTRATO, SOLICITUD, etc.)
+                for (const l of topLines) {
+                    const t = l.text.trim();
+                    if (/SACRAMENTO|CONFIRMA|SOLICITUD|CONTRATO|DECLARA|CERTIFICA|INFORME|AUTORIZA|MATRICULA|FICHA/i.test(t)) {
+                        return t;
+                    }
+                }
+
+                // Strategy 2: Look for prominent uppercase line
+                for (const l of topLines) {
+                    const t = l.text.trim();
+                    const letters = t.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, '');
+                    if (letters.length >= 6 && t.length <= 65 && letters === letters.toUpperCase()) {
+                        return t;
+                    }
+                }
+
+                // Strategy 3: The second line or first line
+                if (topLines.length >= 2 && topLines[1].text.length >= 6 && topLines[1].text.length <= 70) {
+                    return topLines[1].text;
+                }
+                if (topLines.length >= 1 && topLines[0].text.length >= 6 && topLines[0].text.length <= 70) {
+                    return topLines[0].text;
+                }
+
+                return null;
+            } catch (err) {
+                console.warn('Could not extract title from page 1:', err);
+                return null;
+            }
+        }
 
         // Word (.docx) state when loaded as main document
         let currentWordHtmlContent = null;
@@ -1648,6 +1726,8 @@
                 const pdfBytes = await pdfDoc.save();
                 currentWordHtmlContent = null;
                 document.getElementById('word-source-pill').classList.add('hidden');
+                currentDocumentTitle = 'SACRAMENTO DE LA CONFIRMACIÓN';
+                originalUploadedFileName = 'SACRAMENTO_DE_LA_CONFIRMACION';
                 await loadPdfFromBytes(pdfBytes);
 
                 // If initial load, pre-place the user's two problematic examples so they immediately see them working uncut!
@@ -1713,6 +1793,8 @@
 
             const file = files[0];
             const fileName = file.name || 'documento';
+            originalUploadedFileName = fileName.replace(/\.[^/.]+$/, '');
+            currentDocumentTitle = null;
             const lower = fileName.toLowerCase();
 
             try {
@@ -1995,6 +2077,8 @@
             const htmlContent = await extractHtmlFromWordFile(file);
             currentWordHtmlContent = htmlContent;
             currentWordFileName = file.name;
+            originalUploadedFileName = file.name.replace(/\.[^/.]+$/, '');
+            currentDocumentTitle = null;
 
             document.getElementById('word-modal-title').textContent = 'Word cargado: ' + file.name;
             document.getElementById('word-editable-surface').innerHTML = htmlContent;
@@ -2205,6 +2289,17 @@
             // Fit width automatically on mobile screens
             const workspaceWidth = document.getElementById('pdf-workspace').clientWidth - 24;
             const firstPage = await pdfJsDoc.getPage(1);
+
+            // Automatically detect document title from page 1 for smart file naming
+            try {
+                const detectedTitle = await extractTitleFromPage(firstPage);
+                if (detectedTitle) {
+                    currentDocumentTitle = detectedTitle;
+                }
+            } catch (err) {
+                console.warn('Could not extract page 1 title:', err);
+            }
+
             const unscaledViewport = firstPage.getViewport({ scale: 1 });
             baseViewportWidth = unscaledViewport.width;
             baseViewportHeight = unscaledViewport.height;
@@ -4159,7 +4254,12 @@
                 const finalPageCount = pdfDoc.getPageCount();
                 const extraPagesCount = isCreatedFromImages ? 0 : (finalPageCount - totalPages);
 
-                // Trigger automatic download right away
+                // Compute smart filename derived from page 1 document text
+                lastExportedFileName = getSmartExportFileName();
+                const fnInput = document.getElementById('export-filename-input');
+                if (fnInput) fnInput.value = lastExportedFileName;
+
+                // Trigger automatic download right away with intelligent name
                 triggerLastExportDownload();
 
                 // Show clear summary modal with WhatsApp/Email share option
@@ -4180,6 +4280,10 @@
 
         function triggerLastExportDownload() {
             if (!lastExportedBlob) return;
+            const fnInput = document.getElementById('export-filename-input');
+            if (fnInput && fnInput.value.trim()) {
+                updateCustomExportFileName(fnInput.value);
+            }
             const url = URL.createObjectURL(lastExportedBlob);
             const link = document.createElement('a');
             link.href = url;
@@ -4188,17 +4292,21 @@
             link.click();
             document.body.removeChild(link);
             setTimeout(() => URL.revokeObjectURL(url), 5000);
-            showToast('¡PDF descargado en tu dispositivo!');
+            showToast(`¡PDF descargado como "${lastExportedFileName}"!`);
         }
 
         async function shareLastExportedPDF() {
             if (!lastExportedBlob) return;
+            const fnInput = document.getElementById('export-filename-input');
+            if (fnInput && fnInput.value.trim()) {
+                updateCustomExportFileName(fnInput.value);
+            }
             try {
                 const file = new File([lastExportedBlob], lastExportedFileName, { type: 'application/pdf' });
                 if (navigator.canShare && navigator.canShare({ files: [file] })) {
                     await navigator.share({
-                        title: 'Formulario y Anexos en PDF',
-                        text: 'Adjunto el formulario rellenado y firmado con la documentación anexa.',
+                        title: lastExportedFileName.replace('.pdf', ''),
+                        text: 'Adjunto el documento en PDF.',
                         files: [file]
                     });
                 } else {
