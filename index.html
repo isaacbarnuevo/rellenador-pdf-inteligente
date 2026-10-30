@@ -190,6 +190,15 @@
         .page-drag-handle:active {
             cursor: grabbing;
         }
+        .page-manager-card.card-dragging {
+            opacity: 0.4 !important;
+            transform: scale(0.95);
+        }
+        .page-manager-card.card-drop-hover {
+            border-color: #6366f1 !important;
+            background-color: #e0e7ff !important;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.45) !important;
+        }
 
         /* Mobile View Mode Optimization Styles */
         body.mobile-view-active #pdf-workspace {
@@ -1098,26 +1107,29 @@
     <!-- MODAL 6: ORGANIZADOR DE PÁGINAS DEL DOCUMENTO                             -->
     <!-- ========================================================================= -->
     <div id="modal-page-manager" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
-        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
-            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0">
-                <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-layer-group text-indigo-400"></i>
+        <div class="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden animate-fade-in flex flex-col max-h-[92vh]">
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0 border-b border-slate-800">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center">
+                        <i class="fa-solid fa-layer-group text-indigo-400"></i>
+                    </div>
                     <div>
-                        <h3 class="font-bold text-sm sm:text-base">Organizar Páginas del Documento</h3>
-                        <p class="text-[11px] text-slate-300">Reordena o elimina páginas con un toque</p>
+                        <h3 class="font-bold text-sm sm:text-base text-white">Organizar y Reordenar Páginas del Documento</h3>
+                        <p class="text-[11px] text-slate-300">Elige la posición directamente con el desplegable, pulsa ⏮ / ⏭ o arrastra las miniaturas</p>
                     </div>
                 </div>
-                <button onclick="closeModal('modal-page-manager')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg">
+                <button onclick="closeModal('modal-page-manager')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 transition">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
-            <div id="page-manager-list" class="p-4 space-y-2 overflow-y-auto flex-1">
-                <!-- Rendered dynamically -->
+            <div id="page-manager-list" class="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 overflow-y-auto flex-1 bg-slate-100/70">
+                <!-- Rendered dynamically as interactive thumbnail cards with direct position dropdowns -->
             </div>
             <div class="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
-                <span id="page-manager-count" class="text-xs text-slate-600 font-medium">0 páginas en total</span>
-                <button onclick="closeModal('modal-page-manager')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow">
-                    Listo
+                <span id="page-manager-count" class="text-xs text-slate-600 font-semibold">0 páginas en total</span>
+                <button onclick="closeModal('modal-page-manager')" class="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold px-5 py-2 rounded-xl transition shadow flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i>
+                    <span>Listo</span>
                 </button>
             </div>
         </div>
@@ -2497,34 +2509,93 @@
                 container.innerHTML = '';
                 let draggedDocPageNum = null;
 
+                // Auto-scroll workspace when dragging a page near the top or bottom edge
+                const workspace = document.getElementById('pdf-workspace');
+                if (workspace && !workspace.dataset.hasDragAutoScroll) {
+                    workspace.dataset.hasDragAutoScroll = 'true';
+                    workspace.addEventListener('dragover', (e) => {
+                        if (draggedDocPageNum === null) return;
+                        const rect = workspace.getBoundingClientRect();
+                        const topThreshold = rect.top + 90;
+                        const bottomThreshold = rect.bottom - 90;
+
+                        if (e.clientY < topThreshold) {
+                            const distance = Math.max(1, topThreshold - e.clientY);
+                            workspace.scrollTop -= Math.min(30, distance * 0.4);
+                        } else if (e.clientY > bottomThreshold) {
+                            const distance = Math.max(1, e.clientY - bottomThreshold);
+                            workspace.scrollTop += Math.min(30, distance * 0.4);
+                        }
+                    });
+                }
+
                 for (let p = 1; p <= totalPages; p++) {
                     const pageWrapper = document.createElement('div');
                     pageWrapper.id = `page-wrapper-${p}`;
                     pageWrapper.dataset.page = p;
                     pageWrapper.className = 'page-wrapper flex flex-col items-center w-full max-w-full';
 
+                    // Build options for direct position dropdown
+                    let posOptionsHtml = '';
+                    for (let i = 1; i <= totalPages; i++) {
+                        const suffix = i === 1 ? ' (1ª)' : (i === totalPages ? ' (Última)' : '');
+                        posOptionsHtml += `<option value="${i}" ${i === p ? 'selected' : ''}>Pág. ${i}${suffix}</option>`;
+                    }
+
                     pageWrapper.innerHTML = `
-                        <div class="flex items-center justify-between w-full mb-2 px-2 text-xs text-slate-400 font-medium" style="max-width: ${cssWidth}px;">
-                            <div class="flex items-center gap-1.5 sm:gap-2">
-                                <div class="page-drag-handle cursor-grab active:cursor-grabbing flex items-center gap-2 bg-slate-900/95 hover:bg-indigo-950 text-slate-200 hover:text-white px-3 py-1.5 rounded-xl border border-slate-700 hover:border-indigo-500 shadow-md transition select-none" draggable="true" data-page="${p}" title="Arrastra esta página arriba o abajo para cambiar su orden">
-                                    <i class="fa-solid fa-grip-vertical text-indigo-400 text-sm"></i>
+                        <div class="flex items-center justify-between w-full mb-2 px-1 text-xs text-slate-400 font-medium" style="max-width: ${cssWidth}px;">
+                            <div class="flex items-center flex-wrap gap-1.5 sm:gap-2">
+                                <div class="page-drag-handle cursor-grab active:cursor-grabbing flex items-center gap-1.5 bg-slate-900/95 hover:bg-indigo-950 text-slate-200 hover:text-white px-2.5 py-1.5 rounded-xl border border-slate-700 hover:border-indigo-500 shadow-md transition select-none" draggable="true" data-page="${p}" title="Arrastra esta página arriba o abajo para cambiar su orden">
+                                    <i class="fa-solid fa-grip-vertical text-indigo-400 text-xs sm:text-sm"></i>
                                     <span class="w-2.5 h-2.5 rounded-full ${p === currentPage ? 'bg-blue-400 ring-2 ring-blue-500/50' : 'bg-slate-500'} inline-block"></span>
-                                    <span class="font-bold text-slate-100 text-xs sm:text-sm">Página ${p}</span>
-                                    <span class="text-slate-400 font-normal text-xs">/ ${totalPages}</span>
+                                    <span class="font-bold text-slate-100 text-xs sm:text-sm">Pág</span>
                                 </div>
-                                <button onclick="event.stopPropagation(); moveDocumentPage(${p}, -1)" ${p === 1 ? 'disabled' : ''} class="w-8 h-8 rounded-xl bg-slate-800/95 hover:bg-indigo-600 disabled:opacity-20 text-slate-200 hover:text-white flex items-center justify-center text-xs border border-slate-700 shadow transition active:scale-95" title="Subir página (mover antes)">
+
+                                <!-- Selector directo de posición: cambia la página en 1 solo clic -->
+                                <div class="flex items-center gap-1 bg-slate-900/95 border border-indigo-500/70 rounded-xl px-2 py-1 shadow-md" title="Elige directamente en qué página colocar este documento">
+                                    <select id="select-page-pos-${p}" onchange="reorderDocumentPages(${p}, parseInt(this.value))" class="bg-indigo-950 text-amber-300 font-bold text-xs rounded-lg px-2 py-0.5 border border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer">
+                                        ${posOptionsHtml}
+                                    </select>
+                                    <span class="text-slate-400 text-xs font-normal">de ${totalPages}</span>
+                                </div>
+
+                                <!-- Acceso rápido a Página 1 -->
+                                ${totalPages > 1 ? `
+                                <button onclick="event.stopPropagation(); reorderDocumentPages(${p}, 1)" ${p === 1 ? 'disabled' : ''} class="h-8 px-2 sm:px-2.5 rounded-xl bg-slate-900/95 hover:bg-indigo-600 disabled:opacity-20 text-slate-200 hover:text-white flex items-center gap-1 text-xs font-bold border border-slate-700 shadow transition active:scale-95" title="Mover directamente a la Página 1 (Primera)">
+                                    <span>⏮</span>
+                                    <span class="hidden sm:inline text-[11px]">A Pág 1</span>
+                                </button>
+                                ` : ''}
+
+                                <!-- Flechas con conservación de foco (sin perder el botón bajo el ratón) -->
+                                <button id="btn-move-up-${p}" onclick="event.stopPropagation(); moveDocumentPageKeepFocus(${p}, -1)" ${p === 1 ? 'disabled' : ''} class="w-8 h-8 rounded-xl bg-slate-900/95 hover:bg-indigo-600 disabled:opacity-20 text-slate-200 hover:text-white flex items-center justify-center text-xs border border-slate-700 shadow transition active:scale-95" title="Subir 1 puesto (mover antes)">
                                     <i class="fa-solid fa-arrow-up"></i>
                                 </button>
-                                <button onclick="event.stopPropagation(); moveDocumentPage(${p}, 1)" ${p === totalPages ? 'disabled' : ''} class="w-8 h-8 rounded-xl bg-slate-800/95 hover:bg-indigo-600 disabled:opacity-20 text-slate-200 hover:text-white flex items-center justify-center text-xs border border-slate-700 shadow transition active:scale-95" title="Bajar página (mover después)">
+                                <button id="btn-move-down-${p}" onclick="event.stopPropagation(); moveDocumentPageKeepFocus(${p}, 1)" ${p === totalPages ? 'disabled' : ''} class="w-8 h-8 rounded-xl bg-slate-900/95 hover:bg-indigo-600 disabled:opacity-20 text-slate-200 hover:text-white flex items-center justify-center text-xs border border-slate-700 shadow transition active:scale-95" title="Bajar 1 puesto (mover después)">
                                     <i class="fa-solid fa-arrow-down"></i>
                                 </button>
+
+                                <!-- Acceso rápido a la Última página -->
                                 ${totalPages > 1 ? `
-                                <button onclick="event.stopPropagation(); deleteDocumentPage(${p})" class="w-8 h-8 rounded-xl bg-slate-800/95 hover:bg-rose-900/80 text-slate-400 hover:text-rose-300 flex items-center justify-center text-xs border border-slate-700 hover:border-rose-500/60 shadow transition active:scale-95 ml-1" title="Eliminar esta página">
+                                <button onclick="event.stopPropagation(); reorderDocumentPages(${p}, ${totalPages})" ${p === totalPages ? 'disabled' : ''} class="h-8 px-2 sm:px-2 rounded-xl bg-slate-900/95 hover:bg-indigo-600 disabled:opacity-20 text-slate-200 hover:text-white flex items-center gap-1 text-xs font-bold border border-slate-700 shadow transition active:scale-95" title="Mover directamente a la Última posición">
+                                    <span class="hidden sm:inline text-[11px]">Al final</span>
+                                    <span>⏭</span>
+                                </button>
+                                ` : ''}
+
+                                <!-- Ver todas en cuadrícula para organizar fácilmente de un vistazo -->
+                                <button onclick="event.stopPropagation(); openPageManagerModal()" class="h-8 px-2.5 rounded-xl bg-indigo-950/90 hover:bg-indigo-800 text-indigo-300 hover:text-white flex items-center gap-1.5 text-xs font-semibold border border-indigo-600/60 shadow transition active:scale-95" title="Ver todas las páginas en cuadrícula y reordenar fácil">
+                                    <i class="fa-solid fa-table-cells-large text-amber-300"></i>
+                                    <span class="hidden xs:inline sm:inline text-[11px]">Ver todas</span>
+                                </button>
+
+                                ${totalPages > 1 ? `
+                                <button onclick="event.stopPropagation(); deleteDocumentPage(${p})" class="w-8 h-8 rounded-xl bg-slate-900/95 hover:bg-rose-900/80 text-slate-400 hover:text-rose-300 flex items-center justify-center text-xs border border-slate-700 hover:border-rose-500/60 shadow transition active:scale-95 ml-auto sm:ml-1" title="Eliminar esta página">
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
                                 ` : ''}
                             </div>
-                            <span class="text-[11px] text-slate-400 hidden sm:inline flex items-center gap-1.5">
+                            <span class="text-[11px] text-slate-400 hidden lg:inline flex items-center gap-1.5 shrink-0">
                                 <i class="fa-regular fa-hand-pointer text-amber-400"></i>
                                 <span>Arrastra para reordenar o toca para escribir</span>
                             </span>
@@ -2732,10 +2803,19 @@
         // ============================================================================
         // REORDENAR Y GESTIONAR PÁGINAS DEL DOCUMENTO (ARRASTRE EN VISTA PRINCIPAL O BOTONES)
         // ============================================================================
+        let draggedModalCardPage = null;
+
         async function moveDocumentPage(fromPage, delta) {
             const toPage = fromPage + delta;
             if (toPage < 1 || toPage > totalPages) return;
             await reorderDocumentPages(fromPage, toPage);
+        }
+
+        async function moveDocumentPageKeepFocus(fromPage, delta) {
+            const toPage = fromPage + delta;
+            if (toPage < 1 || toPage > totalPages) return;
+            const direction = delta < 0 ? 'up' : 'down';
+            await reorderDocumentPages(fromPage, toPage, { keepFocusDirection: direction, fromPage: fromPage });
         }
 
         async function moveDocumentPageAndRefreshModal(fromPage, delta) {
@@ -2750,7 +2830,20 @@
             renderPageManagerModal();
         }
 
-        async function reorderDocumentPages(fromPage, toPage) {
+        async function reorderDocumentPagesAndRefreshModal(fromPage, toPage) {
+            if (fromPage === toPage || fromPage < 1 || fromPage > totalPages || toPage < 1 || toPage > totalPages) return;
+            await reorderDocumentPages(fromPage, toPage);
+            renderPageManagerModal();
+        }
+
+        function goToPageAndCloseModal(p) {
+            currentPage = p;
+            closeModal('modal-page-manager');
+            const targetEl = document.getElementById(`page-wrapper-${p}`);
+            if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        async function reorderDocumentPages(fromPage, toPage, options = {}) {
             if (fromPage === toPage || fromPage < 1 || fromPage > totalPages || toPage < 1 || toPage > totalPages) return;
             if (!currentPdfBytes) return;
 
@@ -2783,12 +2876,26 @@
                 currentPdfBytes = await newDoc.save();
                 await loadPdfFromBytes(currentPdfBytes, toPage);
 
-                setTimeout(() => {
-                    const targetEl = document.getElementById(`page-wrapper-${toPage}`);
-                    if (targetEl) {
-                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                }, 150);
+                if (options.keepFocusDirection) {
+                    requestAnimationFrame(() => {
+                        const newBtn = document.getElementById(`btn-move-${options.keepFocusDirection}-${toPage}`);
+                        if (newBtn) {
+                            newBtn.focus({ preventScroll: true });
+                            const rect = newBtn.getBoundingClientRect();
+                            const inView = (rect.top >= 60 && rect.bottom <= window.innerHeight - 60);
+                            if (!inView) {
+                                newBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }
+                        }
+                    });
+                } else {
+                    setTimeout(() => {
+                        const targetEl = document.getElementById(`page-wrapper-${toPage}`);
+                        if (targetEl) {
+                            targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 150);
+                }
 
                 scheduleAutoSave();
                 showToast(`✅ Página colocada en la posición ${toPage} de ${totalPages}`);
@@ -2859,47 +2966,98 @@
             list.innerHTML = '';
 
             for (let p = 1; p <= totalPages; p++) {
-                const item = document.createElement('div');
-                item.className = 'bg-slate-50 border border-slate-200 hover:border-indigo-400 rounded-2xl p-3 flex items-center justify-between gap-3 select-none transition shadow-sm';
-                item.innerHTML = `
-                    <div class="flex items-center gap-3 min-w-0">
-                        <div class="relative w-14 h-20 sm:w-16 sm:h-22 bg-white border border-slate-300 rounded-lg overflow-hidden shadow-sm shrink-0 flex items-center justify-center">
-                            <canvas id="page-mgr-thumb-${p}" class="w-full h-full object-contain pointer-events-none"></canvas>
-                            <span class="absolute top-1 left-1 bg-slate-900/90 text-white font-bold text-[10px] px-1.5 py-0.5 rounded shadow">
-                                ${p}
-                            </span>
-                        </div>
-                        <div class="min-w-0">
-                            <h5 class="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                                <span>Página ${p}</span>
-                                <span class="text-slate-400 text-xs font-normal">de ${totalPages}</span>
-                            </h5>
-                            <p class="text-[11px] text-slate-500 mt-0.5 truncate">Toca para ir a esta página en el documento</p>
+                const card = document.createElement('div');
+                card.className = `page-manager-card group relative bg-white border-2 ${p === currentPage ? 'border-indigo-600 ring-2 ring-indigo-400/30' : 'border-slate-200 hover:border-indigo-400'} rounded-2xl p-3 flex flex-col items-center justify-between shadow-sm hover:shadow-md transition select-none`;
+                card.draggable = true;
+                card.dataset.page = p;
+
+                // Build options for direct position selector
+                let optionsHtml = '';
+                for (let i = 1; i <= totalPages; i++) {
+                    const suffix = i === 1 ? ' (1ª)' : (i === totalPages ? ' (Última)' : '');
+                    optionsHtml += `<option value="${i}" ${i === p ? 'selected' : ''}>Pág. ${i}${suffix}</option>`;
+                }
+
+                card.innerHTML = `
+                    <div class="w-full flex items-center justify-between mb-2">
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-bold ${p === currentPage ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-100'}">
+                            <i class="fa-solid fa-file text-[10px]"></i>
+                            <span>Página ${p}</span>
+                        </span>
+                        <span class="text-[11px] text-slate-400 font-medium">de ${totalPages}</span>
+                    </div>
+
+                    <div class="relative w-full h-36 sm:h-44 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-inner flex items-center justify-center p-1 cursor-pointer group-hover:border-indigo-300" onclick="goToPageAndCloseModal(${p})" title="Toca para ir a esta página en el documento">
+                        <canvas id="page-mgr-thumb-${p}" class="max-w-full max-h-full object-contain pointer-events-none"></canvas>
+                        <div class="absolute inset-0 bg-indigo-950/0 hover:bg-indigo-950/20 flex items-center justify-center opacity-0 hover:opacity-100 transition rounded-xl">
+                            <span class="bg-indigo-600/90 text-white text-[11px] font-semibold px-2 py-1 rounded-lg shadow">Ver página</span>
                         </div>
                     </div>
-                    <div class="flex items-center gap-1.5 shrink-0">
-                        <button onclick="event.stopPropagation(); moveDocumentPageAndRefreshModal(${p}, -1)" ${p === 1 ? 'disabled' : ''} class="w-9 h-9 rounded-xl bg-white border border-slate-300 hover:bg-indigo-50 hover:border-indigo-400 disabled:opacity-20 text-slate-700 hover:text-indigo-600 flex items-center justify-center text-xs shadow-sm active:scale-95 transition" title="Subir página">
-                            <i class="fa-solid fa-arrow-up text-sm"></i>
+
+                    <div class="w-full mt-2.5 flex items-center justify-between bg-slate-900 text-slate-200 px-2 py-1.5 rounded-xl text-xs gap-1 shadow-sm">
+                        <span class="text-[11px] text-slate-300 font-medium">Posición:</span>
+                        <select onchange="event.stopPropagation(); reorderDocumentPagesAndRefreshModal(${p}, parseInt(this.value))" class="bg-slate-800 text-amber-300 font-bold px-2 py-1 rounded-lg border border-indigo-500 text-xs focus:ring-2 focus:ring-indigo-400 cursor-pointer">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+
+                    <div class="w-full mt-2 pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
+                        <button onclick="event.stopPropagation(); reorderDocumentPagesAndRefreshModal(${p}, 1)" ${p === 1 ? 'disabled' : ''} class="flex-1 py-1 px-1 rounded-lg bg-slate-100 hover:bg-indigo-100 disabled:opacity-20 text-slate-700 hover:text-indigo-700 font-bold text-[10px] border border-slate-200 transition" title="Mover a Página 1 (Primera)">
+                            ⏮ 1ª
                         </button>
-                        <button onclick="event.stopPropagation(); moveDocumentPageAndRefreshModal(${p}, 1)" ${p === totalPages ? 'disabled' : ''} class="w-9 h-9 rounded-xl bg-white border border-slate-300 hover:bg-indigo-50 hover:border-indigo-400 disabled:opacity-20 text-slate-700 hover:text-indigo-600 flex items-center justify-center text-xs shadow-sm active:scale-95 transition" title="Bajar página">
-                            <i class="fa-solid fa-arrow-down text-sm"></i>
+                        <button onclick="event.stopPropagation(); moveDocumentPageAndRefreshModal(${p}, -1)" ${p === 1 ? 'disabled' : ''} class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-indigo-100 disabled:opacity-20 text-slate-700 hover:text-indigo-700 flex items-center justify-center text-xs border border-slate-200 transition" title="Subir (mover antes)">
+                            <i class="fa-solid fa-arrow-up"></i>
+                        </button>
+                        <button onclick="event.stopPropagation(); moveDocumentPageAndRefreshModal(${p}, 1)" ${p === totalPages ? 'disabled' : ''} class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-indigo-100 disabled:opacity-20 text-slate-700 hover:text-indigo-700 flex items-center justify-center text-xs border border-slate-200 transition" title="Bajar (mover después)">
+                            <i class="fa-solid fa-arrow-down"></i>
+                        </button>
+                        <button onclick="event.stopPropagation(); reorderDocumentPagesAndRefreshModal(${p}, ${totalPages})" ${p === totalPages ? 'disabled' : ''} class="flex-1 py-1 px-1 rounded-lg bg-slate-100 hover:bg-indigo-100 disabled:opacity-20 text-slate-700 hover:text-indigo-700 font-bold text-[10px] border border-slate-200 transition" title="Mover al final (Última)">
+                            ⏭ Fin
                         </button>
                         ${totalPages > 1 ? `
-                        <button onclick="event.stopPropagation(); deleteDocumentPageAndRefreshModal(${p})" class="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs shadow-sm active:scale-95 transition ml-1" title="Eliminar página">
-                            <i class="fa-solid fa-trash-can text-sm"></i>
+                        <button onclick="event.stopPropagation(); deleteDocumentPageAndRefreshModal(${p})" class="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs border border-rose-200 transition ml-0.5" title="Eliminar página">
+                            <i class="fa-solid fa-trash-can"></i>
                         </button>
                         ` : ''}
                     </div>
                 `;
 
-                item.onclick = (e) => {
-                    if (e.target.closest('button')) return;
-                    currentPage = p;
-                    closeModal('modal-page-manager');
-                    const targetEl = document.getElementById(`page-wrapper-${p}`);
-                    if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                };
-                list.appendChild(item);
+                // Drag & drop support inside the modal grid
+                card.addEventListener('dragstart', (e) => {
+                    draggedModalCardPage = p;
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', String(p));
+                    card.classList.add('card-dragging');
+                });
+
+                card.addEventListener('dragend', () => {
+                    draggedModalCardPage = null;
+                    document.querySelectorAll('.page-manager-card').forEach(c => {
+                        c.classList.remove('card-dragging', 'card-drop-hover');
+                    });
+                });
+
+                card.addEventListener('dragover', (e) => {
+                    if (draggedModalCardPage === null || draggedModalCardPage === p) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    card.classList.add('card-drop-hover');
+                });
+
+                card.addEventListener('dragleave', () => {
+                    card.classList.remove('card-drop-hover');
+                });
+
+                card.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    card.classList.remove('card-drop-hover');
+                    if (draggedModalCardPage === null || draggedModalCardPage === p) return;
+                    const from = draggedModalCardPage;
+                    draggedModalCardPage = null;
+                    await reorderDocumentPagesAndRefreshModal(from, p);
+                });
+
+                list.appendChild(card);
             }
 
             // Render live preview thumbnail for each page
@@ -2907,7 +3065,7 @@
                 const thumbCanvas = document.getElementById(`page-mgr-thumb-${p}`);
                 if (thumbCanvas && pdfJsDoc) {
                     pdfJsDoc.getPage(p).then(page => {
-                        const viewport = page.getViewport({ scale: 0.25 });
+                        const viewport = page.getViewport({ scale: 0.35 });
                         thumbCanvas.width = viewport.width;
                         thumbCanvas.height = viewport.height;
                         const ctx = thumbCanvas.getContext('2d');
