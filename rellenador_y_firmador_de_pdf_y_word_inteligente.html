@@ -255,7 +255,7 @@
                 <span>Editar texto Word</span>
             </button>
             <!-- Badge showing extra attached pages that will be appended at the end -->
-            <button onclick="openModal('modal-attachments')" id="extra-pages-pill" class="hidden ml-1 bg-indigo-950 text-indigo-300 border border-indigo-700/70 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 hover:bg-indigo-900 transition">
+            <button onclick="scrollToAnnexes()" id="extra-pages-pill" class="hidden ml-1 bg-indigo-950 text-indigo-300 border border-indigo-700/70 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 hover:bg-indigo-900 transition" title="Ver páginas de anexos adjuntos">
                 <i class="fa-solid fa-paperclip text-amber-400"></i>
                 <span id="extra-pages-text">+1 pág. anexa</span>
             </button>
@@ -370,8 +370,8 @@
         </div>
     </div>
 
-    <!-- MAIN WORKSPACE: SCROLLABLE PDF CANVAS + OVERLAY CONTAINER -->
-    <main id="pdf-workspace" class="flex-1 overflow-auto relative flex flex-col items-center justify-start p-3 sm:p-6 select-none gap-4">
+    <!-- MAIN WORKSPACE: SCROLLABLE MULTI-PAGE CONTINUOUS PDF CANVAS + OVERLAY CONTAINER -->
+    <main id="pdf-workspace" onscroll="handleWorkspaceScroll(event)" class="flex-1 overflow-auto relative flex flex-col items-center justify-start p-3 sm:p-6 select-none gap-6 scroll-smooth">
         <!-- Floating Helper Banner when 1-Click Tipp-Ex Resize is active -->
         <div id="tippex-resize-indicator" class="hidden sticky top-2 z-40 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white text-xs font-bold px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 border border-white/40 animate-pulse">
             <i class="fa-solid fa-crosshairs text-amber-300"></i>
@@ -379,23 +379,11 @@
             <button onclick="cancelTippExClickResize()" class="ml-2 bg-black/30 hover:bg-black/50 px-2.5 py-0.5 rounded-full text-[10px] text-white transition">&times; Cancelar</button>
         </div>
 
-        <!-- Wrapper that matches exact PDF canvas dimensions -->
-        <div id="pdf-stage" class="relative shadow-2xl bg-white rounded-sm overflow-hidden transition-all duration-75 shrink-0" style="width: 595px; height: 842px;">
-            <canvas id="pdf-canvas" class="block w-full h-full pointer-events-none"></canvas>
-            
-            <!-- Interactive layer where user taps and drags texts/signatures/stamped images -->
-            <div id="overlay-layer" class="absolute inset-0 z-10" onclick="handleStageTap(event)" ondblclick="handleStageDoubleClick(event)"></div>
+        <!-- Continuous Document Pages Stack Container -->
+        <div id="pages-container" class="flex flex-col items-center gap-6 w-full"></div>
 
-            <!-- Visual indicator of where the next item will be placed (exact baseline marker) -->
-            <div id="tap-indicator" class="hidden absolute pointer-events-none z-10 transition-all duration-75">
-                <div class="relative">
-                    <div class="w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-blue-600 bg-blue-500/30 flex items-center justify-center shadow-sm">
-                        <div class="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping"></div>
-                    </div>
-                    <div class="absolute left-2 top-0 w-12 border-b-2 border-blue-600/90 border-dashed"></div>
-                </div>
-            </div>
-        </div>
+        <!-- Visual Annex Previews Stack Container (DNI, photos, external PDFs) -->
+        <div id="annex-previews-container" class="flex flex-col items-center gap-6 w-full"></div>
 
         <!-- Live Visual Banner underneath the PDF showing attached extra pages (DNI / Photos / PDFs) -->
         <div id="workspace-annex-banner" onclick="openModal('modal-attachments')" class="w-full max-w-xl bg-slate-800/90 hover:bg-slate-800 border border-indigo-500/40 rounded-2xl p-3 text-white shadow-xl cursor-pointer transition flex items-center justify-between gap-3">
@@ -2314,34 +2302,146 @@
         }
 
         async function renderCurrentPage() {
-            if (!pdfJsDoc) return;
-            const page = await pdfJsDoc.getPage(currentPage);
+            await renderAllDocumentPages();
+        }
 
-            const cssWidth = Math.round(baseViewportWidth * currentZoom);
-            const cssHeight = Math.round(baseViewportHeight * currentZoom);
+        let isRenderingAllPages = false;
+        async function renderAllDocumentPages() {
+            if (!pdfJsDoc || isRenderingAllPages) return;
+            isRenderingAllPages = true;
 
-            const stage = document.getElementById('pdf-stage');
-            stage.style.width = cssWidth + 'px';
-            stage.style.height = cssHeight + 'px';
+            try {
+                const container = document.getElementById('pages-container');
+                if (!container) return;
 
-            // Render at 2x devicePixelRatio for crisp text on mobile Retina screens
-            const pixelRatio = Math.max(window.devicePixelRatio || 1, 2);
-            const viewport = page.getViewport({ scale: currentZoom * pixelRatio });
+                const cssWidth = Math.round(baseViewportWidth * currentZoom);
+                const cssHeight = Math.round(baseViewportHeight * currentZoom);
 
-            const canvas = document.getElementById('pdf-canvas');
-            const context = canvas.getContext('2d');
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
+                // Check if stages already exist for all pages and match currentZoom
+                const existingStages = container.querySelectorAll('.pdf-page-stage');
+                const needsStructureRebuild = (existingStages.length !== totalPages) ||
+                    (existingStages[0] && parseInt(existingStages[0].style.width) !== cssWidth);
 
-            await page.render({ canvasContext: context, viewport }).promise;
+                if (needsStructureRebuild) {
+                    container.innerHTML = '';
+                    for (let p = 1; p <= totalPages; p++) {
+                        const pageWrapper = document.createElement('div');
+                        pageWrapper.id = `page-wrapper-${p}`;
+                        pageWrapper.dataset.page = p;
+                        pageWrapper.className = 'page-wrapper flex flex-col items-center w-full max-w-full';
 
-            // Update UI indicators
-            document.getElementById('page-indicator').textContent = `Pág ${currentPage} / ${totalPages}`;
-            document.getElementById('btn-prev-page').disabled = currentPage <= 1;
-            document.getElementById('btn-next-page').disabled = currentPage >= totalPages;
-            document.getElementById('zoom-indicator').textContent = `${Math.round(currentZoom * 100)}%`;
+                        pageWrapper.innerHTML = `
+                            <div class="flex items-center justify-between w-full mb-1.5 px-2 text-xs text-slate-400 font-medium" style="max-width: ${cssWidth}px;">
+                                <span class="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-700/70 shadow-sm">
+                                    <span class="w-2 h-2 rounded-full ${p === currentPage ? 'bg-blue-400 ring-2 ring-blue-500/50' : 'bg-slate-500'} inline-block"></span>
+                                    <span class="font-bold text-slate-200">Página ${p}</span>
+                                    <span class="text-slate-400 font-normal">de ${totalPages}</span>
+                                </span>
+                                <span class="text-[11px] text-slate-500 hidden sm:inline"><i class="fa-regular fa-hand-pointer mr-1 text-amber-400"></i>Toca para escribir o firmar en esta página</span>
+                            </div>
+                            <div id="pdf-stage-${p}" class="pdf-page-stage relative shadow-2xl bg-white rounded-sm overflow-hidden transition-all duration-75 shrink-0" style="width: ${cssWidth}px; height: ${cssHeight}px;">
+                                <canvas id="pdf-canvas-${p}" class="block w-full h-full pointer-events-none"></canvas>
+                                <div id="overlay-layer-${p}" data-page="${p}" class="overlay-layer absolute inset-0 z-10" onclick="handleStageTap(event, ${p})" ondblclick="handleStageDoubleClick(event, ${p})"></div>
+                                <div id="tap-indicator-${p}" class="tap-indicator hidden absolute pointer-events-none z-20 transition-all duration-75">
+                                    <div class="relative">
+                                        <div class="w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-blue-600 bg-blue-500/30 flex items-center justify-center shadow-sm">
+                                            <div class="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping"></div>
+                                        </div>
+                                        <div class="absolute left-2 top-0 w-12 border-b-2 border-blue-600/90 border-dashed"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        container.appendChild(pageWrapper);
+                    }
 
-            renderOverlays();
+                    // Render each page with PDF.js
+                    const pixelRatio = Math.max(window.devicePixelRatio || 1, 2);
+                    for (let p = 1; p <= totalPages; p++) {
+                        try {
+                            const page = await pdfJsDoc.getPage(p);
+                            const viewport = page.getViewport({ scale: currentZoom * pixelRatio });
+                            const canvas = document.getElementById(`pdf-canvas-${p}`);
+                            if (canvas) {
+                                const ctx = canvas.getContext('2d');
+                                canvas.width = viewport.width;
+                                canvas.height = viewport.height;
+                                await page.render({ canvasContext: ctx, viewport }).promise;
+                            }
+                        } catch (err) {
+                            console.warn(`Error rendering page ${p}:`, err);
+                        }
+                    }
+                }
+
+                // Update UI indicators
+                const pageInd = document.getElementById('page-indicator');
+                if (pageInd) pageInd.textContent = `Pág ${currentPage} / ${totalPages}`;
+                const btnPrev = document.getElementById('btn-prev-page');
+                if (btnPrev) btnPrev.disabled = currentPage <= 1;
+                const btnNext = document.getElementById('btn-next-page');
+                if (btnNext) btnNext.disabled = currentPage >= totalPages;
+                const zoomInd = document.getElementById('zoom-indicator');
+                if (zoomInd) zoomInd.textContent = `${Math.round(currentZoom * 100)}%`;
+
+                // Render visual annex pages (DNI, photos, external PDFs) immediately below
+                await renderVisualAnnexPages(cssWidth, cssHeight);
+
+                // Render all overlays onto their respective pages
+                renderOverlays();
+            } finally {
+                isRenderingAllPages = false;
+            }
+        }
+
+        let scrollDebounceTimer = null;
+        function handleWorkspaceScroll(event) {
+            if (scrollDebounceTimer) return;
+            scrollDebounceTimer = requestAnimationFrame(() => {
+                scrollDebounceTimer = null;
+                if (!pdfJsDoc || totalPages <= 1) return;
+                const workspace = document.getElementById('pdf-workspace');
+                if (!workspace) return;
+                const workspaceRect = workspace.getBoundingClientRect();
+                const centerY = workspaceRect.top + (workspaceRect.height / 2);
+
+                let closestPage = currentPage;
+                let minDistance = Infinity;
+
+                const pages = workspace.querySelectorAll('.page-wrapper[data-page]');
+                pages.forEach(pEl => {
+                    const rect = pEl.getBoundingClientRect();
+                    const pageCenterY = rect.top + (rect.height / 2);
+                    const dist = Math.abs(centerY - pageCenterY);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestPage = parseInt(pEl.dataset.page);
+                    }
+                });
+
+                if (closestPage && closestPage !== currentPage) {
+                    currentPage = closestPage;
+                    const ind = document.getElementById('page-indicator');
+                    if (ind) ind.textContent = `Pág ${currentPage} / ${totalPages}`;
+                    const btnPrev = document.getElementById('btn-prev-page');
+                    if (btnPrev) btnPrev.disabled = currentPage <= 1;
+                    const btnNext = document.getElementById('btn-next-page');
+                    if (btnNext) btnNext.disabled = currentPage >= totalPages;
+
+                    // Update active dot in page headers
+                    workspace.querySelectorAll('.page-wrapper[data-page]').forEach(w => {
+                        const pNum = parseInt(w.dataset.page);
+                        const dot = w.querySelector('.w-2.h-2');
+                        if (dot) {
+                            if (pNum === currentPage) {
+                                dot.className = 'w-2 h-2 rounded-full bg-blue-400 ring-2 ring-blue-500/50 inline-block';
+                            } else {
+                                dot.className = 'w-2 h-2 rounded-full bg-slate-500 inline-block';
+                            }
+                        }
+                    });
+                }
+            });
         }
 
         function changePage(delta) {
@@ -2349,12 +2449,27 @@
             if (next < 1 || next > totalPages) return;
             currentPage = next;
             deselectAll();
-            renderCurrentPage();
+            const targetEl = document.getElementById(`page-wrapper-${currentPage}`);
+            if (targetEl) {
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            document.getElementById('page-indicator').textContent = `Pág ${currentPage} / ${totalPages}`;
+            document.getElementById('btn-prev-page').disabled = currentPage <= 1;
+            document.getElementById('btn-next-page').disabled = currentPage >= totalPages;
+        }
+
+        function scrollToAnnexes() {
+            const annexEl = document.getElementById('annex-previews-container');
+            if (annexEl && annexEl.children.length > 0) {
+                annexEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                openModal('modal-attachments');
+            }
         }
 
         function adjustZoom(delta) {
             currentZoom = Math.min(2.2, Math.max(0.5, +(currentZoom + delta).toFixed(2)));
-            renderCurrentPage();
+            renderAllDocumentPages();
         }
 
         // ============================================================================
@@ -2397,8 +2512,7 @@
             isTippExClickResizeActive = true;
             const indicator = document.getElementById('tippex-resize-indicator');
             if (indicator) indicator.classList.remove('hidden');
-            const layer = document.getElementById('overlay-layer');
-            if (layer) layer.classList.add('stage-crosshair');
+            document.querySelectorAll('.overlay-layer').forEach(l => l.classList.add('stage-crosshair'));
 
             showToast('🎯 Modo 2 clics: Toca en el PDF donde quieres que termine el recuadro blanco', 4500);
             renderOverlays();
@@ -2409,19 +2523,22 @@
             isTippExClickResizeActive = false;
             const indicator = document.getElementById('tippex-resize-indicator');
             if (indicator) indicator.classList.add('hidden');
-            const layer = document.getElementById('overlay-layer');
-            if (layer) layer.classList.remove('stage-crosshair');
+            document.querySelectorAll('.overlay-layer').forEach(l => l.classList.remove('stage-crosshair'));
 
             renderOverlays();
             updateSelectionToolbarUI();
         }
 
-        function handleStageTap(event) {
+        function handleStageTap(event, pageNum) {
+            if (pageNum) {
+                currentPage = pageNum;
+            }
+
             // Check if 1-click Tipp-Ex resize mode is currently active
             if (isTippExClickResizeActive && selectedElementId) {
                 const item = placedElements.find(el => el.id === selectedElementId && el.type === 'whiteout');
                 if (item) {
-                    const stage = document.getElementById('overlay-layer');
+                    const stage = document.getElementById(`overlay-layer-${item.page}`) || event.currentTarget;
                     const rect = stage.getBoundingClientRect();
                     const clickX = event.clientX - rect.left;
                     const clickY = event.clientY - rect.top;
@@ -2453,7 +2570,7 @@
                 }
             }
 
-            if (event.target.id !== 'overlay-layer') return;
+            if (!event.target.classList.contains('overlay-layer')) return;
 
             const rect = event.currentTarget.getBoundingClientRect();
             const clickX = event.clientX - rect.left;
@@ -2464,35 +2581,192 @@
                 yRatio: Math.max(0.01, Math.min(0.98, clickY / rect.height))
             };
 
-            // Show tap crosshair indicator at exact tap coordinates
-            const indicator = document.getElementById('tap-indicator');
-            indicator.style.left = (lastTapPosition.xRatio * 100) + '%';
-            indicator.style.top = (lastTapPosition.yRatio * 100) + '%';
-            indicator.classList.remove('hidden');
+            // Hide all tap indicators, show on this page
+            document.querySelectorAll('.tap-indicator').forEach(ind => ind.classList.add('hidden'));
+            const curIndicator = document.getElementById(`tap-indicator-${currentPage}`);
+            if (curIndicator) {
+                curIndicator.style.left = (lastTapPosition.xRatio * 100) + '%';
+                curIndicator.style.top = (lastTapPosition.yRatio * 100) + '%';
+                curIndicator.classList.remove('hidden');
+            }
+
+            document.getElementById('page-indicator').textContent = `Pág ${currentPage} / ${totalPages}`;
+            document.getElementById('btn-prev-page').disabled = currentPage <= 1;
+            document.getElementById('btn-next-page').disabled = currentPage >= totalPages;
 
             if (selectedElementId) {
                 deselectAll();
             } else {
-                document.getElementById('status-hint').textContent = 'Punto exacto marcado: escribe o toca un Dato Rápido abajo';
+                document.getElementById('status-hint').textContent = `Página ${currentPage} marcada: escribe o toca un Dato Rápido abajo`;
             }
         }
 
-        function handleStageDoubleClick(event) {
-            if (event.target.id !== 'overlay-layer') return;
-            handleStageTap(event);
+        function handleStageDoubleClick(event, pageNum) {
+            if (!event.target.classList.contains('overlay-layer')) return;
+            handleStageTap(event, pageNum);
             openAddTextModal();
         }
 
+        async function renderVisualAnnexPages(cssWidth, cssHeight) {
+            const annexContainer = document.getElementById('annex-previews-container');
+            if (!annexContainer) return;
+            annexContainer.innerHTML = '';
+
+            const extraItems = isCreatedFromImages ? [] : attachmentsQueue;
+            const banner = document.getElementById('workspace-annex-banner');
+
+            if (extraItems.length === 0) {
+                if (banner) banner.classList.remove('hidden');
+                return;
+            }
+
+            if (banner) banner.classList.add('hidden');
+
+            const totalExtraPages = extraItems.reduce((acc, item) => acc + (item.pageCount || 1), 0);
+
+            // Header separator between main document and annexes
+            const header = document.createElement('div');
+            header.className = 'flex items-center gap-3 w-full my-4 px-2';
+            header.style.maxWidth = cssWidth + 'px';
+            header.innerHTML = `
+                <div class="h-px bg-gradient-to-r from-transparent via-indigo-500/60 to-transparent flex-1"></div>
+                <div class="bg-indigo-950/90 border border-indigo-500/50 text-indigo-200 px-3.5 py-1.5 rounded-full text-xs font-bold shadow-lg flex items-center gap-2">
+                    <i class="fa-solid fa-paperclip text-amber-300"></i>
+                    <span>PÁGINAS DE ANEXOS QUE SE UNIRÁN AL FINAL (${totalExtraPages} pág.)</span>
+                </div>
+                <div class="h-px bg-gradient-to-r from-transparent via-indigo-500/60 to-transparent flex-1"></div>
+            `;
+            annexContainer.appendChild(header);
+
+            // Render each attachment preview as a true A4 page container
+            for (let idx = 0; idx < extraItems.length; idx++) {
+                const item = extraItems[idx];
+
+                if (item.type === 'dni_pair') {
+                    const card = document.createElement('div');
+                    card.className = 'page-wrapper flex flex-col items-center w-full max-w-full mb-6';
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between w-full mb-1.5 px-2 text-xs text-indigo-300 font-medium" style="max-width: ${cssWidth}px;">
+                            <span class="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-indigo-700/60 shadow-sm">
+                                <i class="fa-solid fa-id-card text-amber-400"></i>
+                                <span class="font-bold">Anexo ${idx + 1}: ${escapeHtml(item.title || 'DNI')}</span>
+                            </span>
+                            <button onclick="openModal('modal-attachments')" class="text-[11px] text-indigo-400 hover:text-indigo-200 transition underline">Gestionar / Reordenar</button>
+                        </div>
+                        <div class="relative shadow-2xl bg-white rounded-sm overflow-hidden flex flex-col items-center justify-center p-6 sm:p-10 shrink-0" style="width: ${cssWidth}px; height: ${cssHeight}px;">
+                            <div class="w-full text-center pb-4 border-b border-slate-200 mb-6">
+                                <h3 class="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-wider">DOCUMENTO NACIONAL DE IDENTIDAD</h3>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Fotocopia oficial para adjuntar al expediente</p>
+                            </div>
+                            <div class="flex-1 w-full flex flex-col items-center justify-center gap-6">
+                                ${item.isSingleSheet || item.singleDataUrl ? `
+                                    <div class="w-full max-w-[85%] max-h-[75%] border border-slate-300 shadow-md rounded-xl overflow-hidden bg-slate-50 flex items-center justify-center p-2">
+                                        <img src="${item.singleDataUrl || item.frontDataUrl}" class="max-h-full max-w-full object-contain pointer-events-none select-none rounded" />
+                                    </div>
+                                ` : `
+                                    <div class="w-full max-w-[82%] border border-slate-300 shadow-md rounded-xl overflow-hidden bg-slate-50 p-2 flex flex-col items-center">
+                                        <div class="text-[10px] text-slate-500 font-semibold mb-1 w-full text-left">Anverso:</div>
+                                        <img src="${item.frontDataUrl}" class="max-h-36 sm:max-h-48 object-contain pointer-events-none select-none rounded" />
+                                    </div>
+                                    <div class="w-full max-w-[82%] border border-slate-300 shadow-md rounded-xl overflow-hidden bg-slate-50 p-2 flex flex-col items-center">
+                                        <div class="text-[10px] text-slate-500 font-semibold mb-1 w-full text-left">Reverso:</div>
+                                        <img src="${item.backDataUrl}" class="max-h-36 sm:max-h-48 object-contain pointer-events-none select-none rounded" />
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                    annexContainer.appendChild(card);
+                } else if (item.type === 'image_page') {
+                    const card = document.createElement('div');
+                    card.className = 'page-wrapper flex flex-col items-center w-full max-w-full mb-6';
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between w-full mb-1.5 px-2 text-xs text-indigo-300 font-medium" style="max-width: ${cssWidth}px;">
+                            <span class="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-indigo-700/60 shadow-sm">
+                                <i class="fa-solid fa-image text-amber-400"></i>
+                                <span class="font-bold">Anexo ${idx + 1}: ${escapeHtml(item.title || 'Foto documento')}</span>
+                            </span>
+                            <button onclick="openModal('modal-attachments')" class="text-[11px] text-indigo-400 hover:text-indigo-200 transition underline">Gestionar / Reordenar</button>
+                        </div>
+                        <div class="relative shadow-2xl bg-white rounded-sm overflow-hidden flex items-center justify-center p-4 shrink-0" style="width: ${cssWidth}px; height: ${cssHeight}px;">
+                            <img src="${item.imageDataUrl}" class="max-w-[94%] max-h-[94%] object-contain pointer-events-none select-none shadow-sm rounded" />
+                        </div>
+                    `;
+                    annexContainer.appendChild(card);
+                } else if (item.type === 'external_pdf' && item.pdfBytes) {
+                    try {
+                        const extLoading = pdfjsLib.getDocument({ data: item.pdfBytes.slice(0) });
+                        const extDoc = await extLoading.promise;
+                        const numExtPages = extDoc.numPages;
+
+                        for (let ep = 1; ep <= numExtPages; ep++) {
+                            const extPage = await extDoc.getPage(ep);
+                            const card = document.createElement('div');
+                            card.className = 'page-wrapper flex flex-col items-center w-full max-w-full mb-6';
+                            const canvasId = `ext-pdf-canvas-${idx}-${ep}`;
+                            card.innerHTML = `
+                                <div class="flex items-center justify-between w-full mb-1.5 px-2 text-xs text-indigo-300 font-medium" style="max-width: ${cssWidth}px;">
+                                    <span class="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-indigo-700/60 shadow-sm">
+                                        <i class="fa-solid fa-file-pdf text-rose-400"></i>
+                                        <span class="font-bold">Anexo ${idx + 1}: ${escapeHtml(item.title || 'PDF')} (Pág ${ep}/${numExtPages})</span>
+                                    </span>
+                                    <button onclick="openModal('modal-attachments')" class="text-[11px] text-indigo-400 hover:text-indigo-200 transition underline">Gestionar / Reordenar</button>
+                                </div>
+                                <div class="relative shadow-2xl bg-white rounded-sm overflow-hidden shrink-0" style="width: ${cssWidth}px; height: ${cssHeight}px;">
+                                    <canvas id="${canvasId}" class="block w-full h-full pointer-events-none"></canvas>
+                                </div>
+                            `;
+                            annexContainer.appendChild(card);
+
+                            const pixelRatio = Math.max(window.devicePixelRatio || 1, 2);
+                            const viewport = extPage.getViewport({ scale: currentZoom * pixelRatio });
+                            const canEl = document.getElementById(canvasId);
+                            if (canEl) {
+                                canEl.width = viewport.width;
+                                canEl.height = viewport.height;
+                                await extPage.render({ canvasContext: canEl.getContext('2d'), viewport }).promise;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('Could not render external PDF preview:', err);
+                    }
+                }
+            }
+
+            // Bottom action card for adding or managing attachments
+            const footerCard = document.createElement('div');
+            footerCard.className = 'w-full max-w-xl bg-slate-800/90 hover:bg-slate-800 border border-indigo-500/40 rounded-2xl p-3 text-white shadow-xl cursor-pointer transition flex items-center justify-between gap-3 mt-2 mb-6';
+            footerCard.onclick = () => openModal('modal-attachments');
+            footerCard.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-indigo-600/40 border border-indigo-400/40 flex items-center justify-center text-amber-300 shrink-0">
+                        <i class="fa-solid fa-plus text-base"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-xs sm:text-sm font-bold flex items-center gap-1.5">
+                            <span>¿Deseas añadir más páginas, fotos o reordenarlas?</span>
+                        </h4>
+                        <p class="text-[11px] text-slate-300">Tienes ${extraItems.length} anexo(s) con ${totalExtraPages} página(s) listas que se unirán al final del PDF.</p>
+                    </div>
+                </div>
+                <span class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl shrink-0">
+                    Gestionar
+                </span>
+            `;
+            annexContainer.appendChild(footerCard);
+        }
+
         function renderOverlays() {
-            const layer = document.getElementById('overlay-layer');
-            layer.innerHTML = '';
+            // Clear all overlay layers across all document pages
+            document.querySelectorAll('.overlay-layer').forEach(l => l.innerHTML = '');
 
             const stageWidth = baseViewportWidth * currentZoom;
             const stageHeight = baseViewportHeight * currentZoom;
 
-            const pageItems = placedElements.filter(el => el.page === currentPage);
+            placedElements.forEach(item => {
+                const targetLayer = document.getElementById(`overlay-layer-${item.page || 1}`);
+                if (!targetLayer) return;
 
-            pageItems.forEach(item => {
                 const el = document.createElement('div');
                 el.dataset.id = item.id;
                 el.className = 'overlay-item' + (item.type === 'whiteout' ? ' type-whiteout' : '') + (item.id === selectedElementId ? ' selected' : '');
@@ -2566,7 +2840,7 @@
 
                 // Make draggable via Mouse & Touch with Pointer Events
                 attachDragBehavior(el, item);
-                layer.appendChild(el);
+                targetLayer.appendChild(el);
             });
 
             updateSelectionToolbarUI();
@@ -2584,8 +2858,7 @@
                 const startPointerY = e.clientY;
                 const startWidth = (item.widthRatio || 0.12) * stageWidth;
                 const startHeight = (item.heightRatio || 0.018) * stageHeight;
-                const layer = document.getElementById('overlay-layer');
-                const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
+                const domNode = document.querySelector(`.overlay-item[data-id="${item.id}"]`);
                 let hasMoved = false;
 
                 if (handleNode.setPointerCapture) {
@@ -2740,19 +3013,15 @@
         // ============================================================================
         function selectElement(id) {
             selectedElementId = id;
-            const indicator = document.getElementById('tap-indicator');
-            if (indicator) indicator.classList.add('hidden');
+            document.querySelectorAll('.tap-indicator').forEach(ind => ind.classList.add('hidden'));
 
-            const layer = document.getElementById('overlay-layer');
-            if (layer) {
-                Array.from(layer.children).forEach(child => {
-                    if (child.dataset.id === id) {
-                        child.classList.add('selected');
-                    } else {
-                        child.classList.remove('selected');
-                    }
-                });
-            }
+            document.querySelectorAll('.overlay-item').forEach(child => {
+                if (child.dataset.id === id) {
+                    child.classList.add('selected');
+                } else {
+                    child.classList.remove('selected');
+                }
+            });
             updateSelectionToolbarUI();
         }
 
@@ -2761,10 +3030,7 @@
             if (isTippExClickResizeActive) {
                 cancelTippExClickResize();
             }
-            const layer = document.getElementById('overlay-layer');
-            if (layer) {
-                Array.from(layer.children).forEach(child => child.classList.remove('selected', 'resizing'));
-            }
+            document.querySelectorAll('.overlay-item').forEach(child => child.classList.remove('selected', 'resizing'));
             updateSelectionToolbarUI();
         }
 
@@ -2829,8 +3095,7 @@
 
             const stageWidth = baseViewportWidth * currentZoom;
             const stageHeight = baseViewportHeight * currentZoom;
-            const layer = document.getElementById('overlay-layer');
-            const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
+            const domNode = document.querySelector(`.overlay-item[data-id="${item.id}"]`);
 
             if (item.type === 'text') {
                 item.fontSize = Math.max(6, Math.min(48, +(item.fontSize + delta * 1).toFixed(0)));
@@ -2866,8 +3131,7 @@
             if (!item || item.type !== 'whiteout') return;
             const stageWidth = baseViewportWidth * currentZoom;
             const stageHeight = baseViewportHeight * currentZoom;
-            const layer = document.getElementById('overlay-layer');
-            const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
+            const domNode = document.querySelector(`.overlay-item[data-id="${item.id}"]`);
 
             if (preset === 'word') {
                 item.widthRatio = 0.12;
@@ -2898,8 +3162,7 @@
 
             const stageWidth = baseViewportWidth * currentZoom;
             const stageHeight = baseViewportHeight * currentZoom;
-            const layer = document.getElementById('overlay-layer');
-            const domNode = layer ? layer.querySelector(`[data-id="${item.id}"]`) : null;
+            const domNode = document.querySelector(`.overlay-item[data-id="${item.id}"]`);
 
             if (dim === 'width') {
                 const stepRatio = 14 / stageWidth;
@@ -2922,13 +3185,10 @@
             item.xRatio = Math.max(0, Math.min(0.99, item.xRatio + (dxPx / stageWidth)));
             item.yRatio = Math.max(0, Math.min(0.99, item.yRatio + (dyPx / stageHeight)));
 
-            const layer = document.getElementById('overlay-layer');
-            if (layer) {
-                const domNode = layer.querySelector(`[data-id="${item.id}"]`);
-                if (domNode) {
-                    domNode.style.left = (item.xRatio * stageWidth) + 'px';
-                    domNode.style.top = (item.yRatio * stageHeight) + 'px';
-                }
+            const domNode = document.querySelector(`.overlay-item[data-id="${item.id}"]`);
+            if (domNode) {
+                domNode.style.left = (item.xRatio * stageWidth) + 'px';
+                domNode.style.top = (item.yRatio * stageHeight) + 'px';
             }
             scheduleAutoSave();
         }
@@ -2936,23 +3196,16 @@
         function setSelectedColor(hexColor) {
             const item = getSelectedElement();
             if (!item) return;
+            const domNode = document.querySelector(`.overlay-item[data-id="${item.id}"]`);
             if (item.type === 'text') {
                 item.color = hexColor;
-                const layer = document.getElementById('overlay-layer');
-                if (layer) {
-                    const domNode = layer.querySelector(`[data-id="${item.id}"]`);
-                    if (domNode) {
-                        domNode.style.color = hexColor;
-                    }
+                if (domNode) {
+                    domNode.style.color = hexColor;
                 }
             } else if (item.type === 'whiteout') {
                 item.color = hexColor;
-                const layer = document.getElementById('overlay-layer');
-                if (layer) {
-                    const domNode = layer.querySelector(`[data-id="${item.id}"]`);
-                    if (domNode) {
-                        domNode.style.backgroundColor = hexColor;
-                    }
+                if (domNode) {
+                    domNode.style.backgroundColor = hexColor;
                 }
             }
             scheduleAutoSave();
@@ -3952,6 +4205,11 @@
                         Todavía no has añadido anexos ni fotos. Usa las pestañas de arriba para adjuntar DNI, fotos o PDFs.
                     </div>
                 `;
+                if (baseViewportWidth && baseViewportHeight) {
+                    const cssWidth = Math.round(baseViewportWidth * currentZoom);
+                    const cssHeight = Math.round(baseViewportHeight * currentZoom);
+                    renderVisualAnnexPages(cssWidth, cssHeight);
+                }
                 return;
             }
 
@@ -4078,6 +4336,12 @@
                 `;
                 qList.appendChild(row);
             });
+
+            if (baseViewportWidth && baseViewportHeight) {
+                const cssWidth = Math.round(baseViewportWidth * currentZoom);
+                const cssHeight = Math.round(baseViewportHeight * currentZoom);
+                renderVisualAnnexPages(cssWidth, cssHeight);
+            }
         }
 
         // Helper to embed either PNG or JPEG DataURL into pdf-lib document seamlessly
