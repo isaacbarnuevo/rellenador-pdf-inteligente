@@ -536,10 +536,10 @@
                         </div>
                         <div>
                             <div class="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                                <span>Abrir archivo de mi dispositivo</span>
-                                <span class="bg-blue-500/30 text-blue-300 text-[10px] px-2 py-0.2 rounded-full font-semibold border border-blue-400/30">Principal</span>
+                                <span>Abrir archivo(s) de mi dispositivo</span>
+                                <span class="bg-blue-500/30 text-blue-300 text-[10px] px-2 py-0.2 rounded-full font-semibold border border-blue-400/30">Únelos con Ctrl</span>
                             </div>
-                            <p class="text-[11px] text-slate-300 mt-0.5">Soporta PDF, Word (.docx), fotos o proyectos (.rellenador)</p>
+                            <p class="text-[11px] text-slate-300 mt-0.5">Selecciona uno o varios archivos a la vez con <strong>Ctrl</strong> (PDFs, fotos, Word) para unirlos en un solo documento</p>
                         </div>
                     </div>
                     <i class="fa-solid fa-chevron-right text-slate-400 group-hover:text-blue-300 transition shrink-0 ml-2"></i>
@@ -1817,59 +1817,137 @@
             if (!files.length) return;
 
             const isImage = (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name);
-            const allImages = files.every(isImage);
+            const isWord = (f) => {
+                const lower = (f.name || '').toLowerCase();
+                return lower.endsWith('.docx') || lower.endsWith('.doc') ||
+                    (f.type && (f.type.includes('word') || f.type.includes('officedocument.wordprocessingml.document')));
+            };
+            const isProject = (f) => {
+                const lower = (f.name || '').toLowerCase();
+                return lower.endsWith('.rellenador') || lower.endsWith('.json');
+            };
+            const isPdf = (f) => {
+                const lower = (f.name || '').toLowerCase();
+                return lower.endsWith('.pdf') || (f.type && f.type.includes('pdf'));
+            };
 
-            if (allImages) {
+            // CASE 1: Single project file (.rellenador or .json project)
+            if (files.length === 1 && isProject(files[0])) {
+                await handleProjectFileUpload(files[0]);
+                event.target.value = '';
+                return;
+            }
+
+            // CASE 2: All selected files are images
+            if (files.every(isImage)) {
                 await handleCreatePdfFromImagesFiles(files);
                 event.target.value = '';
                 return;
             }
 
-            const file = files[0];
-            const fileName = file.name || 'documento';
-            originalUploadedFileName = fileName.replace(/\.[^/.]+$/, '');
+            // CASE 3: Single file or Multiple files (mixture of PDFs, images, Word docs selected with CTRL / Shift)
+            showToast(files.length > 1 ? `Abriendo y uniendo ${files.length} documentos seleccionados...` : 'Abriendo documento...');
+
+            // Clear previous elements & queue
+            placedElements = [];
+            deselectAll();
+            currentWordHtmlContent = null;
+            document.getElementById('word-source-pill').classList.add('hidden');
+            attachmentsQueue = [];
+            isCreatedFromImages = false;
+
+            // Pick the primary file to open in the main interactive editor:
+            // Prefer the first PDF or Word document as primary; if none, the first image.
+            let mainIdx = files.findIndex(f => isPdf(f) || isWord(f));
+            if (mainIdx < 0) mainIdx = 0;
+
+            const mainFile = files[mainIdx];
+            const otherFiles = files.filter((_, idx) => idx !== mainIdx);
+
+            originalUploadedFileName = (mainFile.name || 'documento').replace(/\.[^/.]+$/, '');
             currentDocumentTitle = null;
-            const lower = fileName.toLowerCase();
 
             try {
-                // Check if user selected an editable project file (.rellenador or .json project)
-                if (lower.endsWith('.rellenador') || lower.endsWith('.json')) {
-                    await handleProjectFileUpload(file);
-                    event.target.value = '';
-                    return;
+                // 1. Load Main File
+                if (isWord(mainFile)) {
+                    await handleMainWordUpload(mainFile);
+                } else if (isPdf(mainFile)) {
+                    currentPdfFileName = mainFile.name;
+                    const arrayBuffer = await mainFile.arrayBuffer();
+                    await loadPdfFromBytes(new Uint8Array(arrayBuffer));
+                } else if (isImage(mainFile)) {
+                    // Main file is an image, convert it as initial PDF page
+                    const { PDFDocument } = PDFLib;
+                    const pdfDoc = await PDFDocument.create();
+                    const dataUrl = await compressAndNormalizeImage(mainFile, 1600, 0.90);
+                    const embeddedImg = await embedDataUrlImage(pdfDoc, dataUrl);
+                    const a4W = 595.28, a4H = 841.89;
+                    const page = pdfDoc.addPage([a4W, a4H]);
+                    const dims = embeddedImg.scaleToFit(a4W - 40, a4H - 40);
+                    page.drawImage(embeddedImg, {
+                        x: (a4W - dims.width) / 2,
+                        y: (a4H - dims.height) / 2,
+                        width: dims.width,
+                        height: dims.height
+                    });
+                    const generatedBytes = await pdfDoc.save();
+                    await loadPdfFromBytes(generatedBytes);
                 }
 
-                // Check if user selected a Word file (.docx or .doc)
-                if (
-                    lower.endsWith('.docx') ||
-                    lower.endsWith('.doc') ||
-                    file.type.includes('word') ||
-                    file.type.includes('officedocument.wordprocessingml.document')
-                ) {
-                    await handleMainWordUpload(file);
-                    event.target.value = '';
-                    return;
+                // 2. Load all remaining selected files directly into attachmentsQueue
+                for (let i = 0; i < otherFiles.length; i++) {
+                    const extraFile = otherFiles[i];
+                    try {
+                        if (isPdf(extraFile)) {
+                            const ab = await extraFile.arrayBuffer();
+                            const uint8 = new Uint8Array(ab);
+                            const extDoc = await PDFLib.PDFDocument.load(uint8);
+                            attachmentsQueue.push({
+                                id: 'annex_pdf_' + Date.now() + '_' + i,
+                                type: 'external_pdf',
+                                title: extraFile.name,
+                                pdfBytes: uint8,
+                                pageCount: extDoc.getPageCount()
+                            });
+                        } else if (isImage(extraFile)) {
+                            const dataUrl = await compressAndNormalizeImage(extraFile, 1600, 0.90);
+                            attachmentsQueue.push({
+                                id: 'annex_img_' + Date.now() + '_' + i,
+                                type: 'image_page',
+                                title: extraFile.name.replace(/\.[^/.]+$/, ''),
+                                imageDataUrl: dataUrl,
+                                pageCount: 1
+                            });
+                        } else if (isWord(extraFile)) {
+                            const html = await extractHtmlFromWordFile(extraFile);
+                            const convertedBytes = await convertWordHtmlToPdfBytes(html);
+                            const extDoc = await PDFLib.PDFDocument.load(convertedBytes);
+                            attachmentsQueue.push({
+                                id: 'annex_word_' + Date.now() + '_' + i,
+                                type: 'external_pdf',
+                                isFromWord: true,
+                                title: extraFile.name + ' (Word)',
+                                pdfBytes: convertedBytes,
+                                pageCount: extDoc.getPageCount()
+                            });
+                        }
+                    } catch (errAnnex) {
+                        console.warn(`Error anexando archivo ${extraFile.name}:`, errAnnex);
+                    }
                 }
 
-                if (isImage(file)) {
-                    await handleCreatePdfFromImagesFiles([file]);
-                    event.target.value = '';
-                    return;
-                }
+                // Update UI badges, scroll previews and indicators
+                updateAttachmentsBadgesAndSummary();
+                await renderAllDocumentPages();
 
-                // Otherwise load as PDF
-                currentPdfFileName = file.name;
-                const arrayBuffer = await file.arrayBuffer();
-                placedElements = [];
-                deselectAll();
-                isCreatedFromImages = false;
-                currentWordHtmlContent = null;
-                document.getElementById('word-source-pill').classList.add('hidden');
-                await loadPdfFromBytes(new Uint8Array(arrayBuffer));
-                showToast('PDF cargado: ' + file.name);
+                if (otherFiles.length > 0) {
+                    showToast(`✅ ${files.length} documentos unidos: 1 principal y ${otherFiles.length} anexo(s) listos para generar PDF`, 5500);
+                } else {
+                    showToast('Documento cargado correctamente');
+                }
             } catch (err) {
-                console.error('Error reading uploaded file:', err);
-                showToast('No se pudo abrir el archivo seleccionado');
+                console.error('Error cargando lote de archivos:', err);
+                showToast('No se pudieron procesar todos los archivos seleccionados');
             }
             event.target.value = '';
         }
